@@ -2,7 +2,7 @@
 // number of ticks => identical result. No react, no three, no DOM, no
 // Math.random (CLAUDE.md iron rule + determinism rule).
 
-import type { WorldState, Agent, ActiveAction, NeedKey } from './types';
+import type { WorldState, Agent, ActiveAction, NeedKey, SavedWorld } from './types';
 import { Rng, deriveSeed } from './rng';
 import { generateTerrain } from './terrain';
 import { generateResources } from './resources';
@@ -139,6 +139,32 @@ function moveAndPerform(agent: Agent): void {
   }
 }
 
+/** Extract the persistable subset (terrain/resources are rebuilt from seed). */
+export function toSaved(state: WorldState): SavedWorld {
+  return {
+    seed: state.seed,
+    tick: state.tick,
+    day: state.day,
+    hour: state.hour,
+    rngState: state.rngState,
+    agent: cloneAgent(state.agent),
+  };
+}
+
+/** Rebuild a full WorldState from a saved subset, regenerating terrain/resources. */
+export function hydrate(saved: SavedWorld): WorldState {
+  return {
+    seed: saved.seed,
+    tick: saved.tick,
+    day: saved.day,
+    hour: saved.hour,
+    rngState: saved.rngState,
+    agent: cloneAgent(saved.agent),
+    terrain: generateTerrain(saved.seed),
+    resources: generateResources(saved.seed),
+  };
+}
+
 function clampNeeds(agent: Agent): void {
   for (const key of NEED_KEYS) {
     const v = agent.needs[key];
@@ -146,22 +172,25 @@ function clampNeeds(agent: Agent): void {
   }
 }
 
-function cloneState(s: WorldState): WorldState {
-  const a = s.agent;
+function cloneAgent(a: Agent): Agent {
   const action = a.currentAction;
+  return {
+    id: a.id,
+    name: a.name,
+    needs: { ...a.needs },
+    position: { ...a.position },
+    currentAction: action ? { ...action, targetPos: { ...action.targetPos } } : null,
+  };
+}
+
+function cloneState(s: WorldState): WorldState {
   return {
     seed: s.seed,
     tick: s.tick,
     day: s.day,
     hour: s.hour,
     rngState: s.rngState,
-    agent: {
-      id: a.id,
-      name: a.name,
-      needs: { ...a.needs },
-      position: { ...a.position },
-      currentAction: action ? { ...action, targetPos: { ...action.targetPos } } : null,
-    },
+    agent: cloneAgent(s.agent),
     // Immutable, seed-derived — safe to share by reference.
     terrain: s.terrain,
     resources: s.resources,
