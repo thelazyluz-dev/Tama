@@ -5,27 +5,36 @@ import { Canvas } from '@react-three/fiber';
 import * as THREE from 'three';
 import { WORLD_HALF } from '../sim';
 import { Scene } from './Scene';
+import { Effects } from './Effects';
 
 const INITIAL_SKY = '#233251';
 
 export function GameCanvas(): JSX.Element {
   return (
     <Canvas
-      shadows
+      shadows="soft"
       dpr={[1, 2]}
+      gl={{
+        antialias: false, // SMAA handles it
+        powerPreference: 'high-performance',
+        stencil: false,
+        toneMappingExposure: 1.05,
+      }}
       camera={{
         position: [WORLD_HALF * 0.55, WORLD_HALF * 0.8, WORLD_HALF * 0.55],
         fov: 45,
         near: 0.1,
         far: WORLD_HALF * 8,
       }}
-      onCreated={({ scene }) => {
+      onCreated={({ scene, gl }) => {
+        gl.toneMapping = THREE.ACESFilmicToneMapping;
         scene.background = new THREE.Color(INITIAL_SKY);
-        scene.fog = new THREE.Fog(INITIAL_SKY, WORLD_HALF * 0.9, WORLD_HALF * 3.6);
+        scene.fog = new THREE.Fog(INITIAL_SKY, WORLD_HALF * 1.1, WORLD_HALF * 4.2);
       }}
       style={{ position: 'absolute', inset: 0 }}
     >
       <Scene />
+      <Effects />
     </Canvas>
   );
 }
