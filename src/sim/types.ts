@@ -1,16 +1,43 @@
-// Stage-0 state schema. Deliberately minimal (kickoff: "WorldState ו־Agent
-// מצומצמים לשלב הזה"): one agent, three needs, four actions. Names and shapes
-// mirror the full schema in docs/SPEC.md so later stages extend rather than
-// rewrite. No `any` anywhere in src/sim.
+// Stage-1 state schema ("הישרדות אמיתית"): eight needs, health & death,
+// seasons & weather, food stock, structures, and the journal. Names/shapes
+// still mirror docs/SPEC.md so later stages extend rather than rewrite. No
+// `any` anywhere in src/sim.
 
-/** The three needs tracked in stage 0. 0 = satisfied, 100 = full distress. */
-export type NeedKey = 'hunger' | 'thirst' | 'fatigue';
+/** The eight needs (SPEC "צרכים והישרדות"). 0 = satisfied, 100 = full distress. */
+export type NeedKey =
+  | 'hunger'
+  | 'thirst'
+  | 'fatigue'
+  | 'warmth'
+  | 'hygiene'
+  | 'loneliness'
+  | 'boredom'
+  | 'safety';
 
-/** The four actions available in stage 0. */
-export type ActionId = 'eat' | 'drink' | 'sleep' | 'wander';
+/** Stage-1 actions. */
+export type ActionId =
+  | 'eat'
+  | 'drink'
+  | 'sleep'
+  | 'wander'
+  | 'gather'
+  | 'wash'
+  | 'warm'
+  | 'buildShelter'
+  | 'makeFire';
 
-/** Resource kinds present on the map in stage 0. */
 export type ResourceType = 'water' | 'fruit';
+export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
+export type Weather = 'clear' | 'rain' | 'storm' | 'snow' | 'heat';
+export type StructureType = 'shelter' | 'fire';
+
+/**
+ * AI behaviour profile. 'sensible' prepares for winter (fills the food store,
+ * builds shelter, keeps a fire). 'reactive' only answers immediate needs — used
+ * to model a neglected agent for the stage-1 transition test, and the seam
+ * where stage 5's player priorities will plug in.
+ */
+export type AiProfile = 'sensible' | 'reactive';
 
 export interface Vec2 {
   x: number;
@@ -21,59 +48,113 @@ export interface ResourceNode {
   id: string;
   type: ResourceType;
   position: Vec2;
+  /** Fruit only: harvestable units remaining (regrows outside winter). */
+  quantity: number;
+}
+
+export interface Structure {
+  id: string;
+  type: StructureType;
+  position: Vec2;
+  /** Fire only: remaining fuel (0 = burnt out). */
+  fuel: number;
 }
 
 /** Terrain is DERIVED from the seed, never persisted (keeps saves tiny). */
 export interface TerrainData {
   size: number;
-  /** Row-major heightmap of size*size samples. */
   heights: Float32Array;
 }
 
 export interface ActiveAction {
   type: ActionId;
-  /** Resource node id for eat/drink; undefined for sleep/wander. */
   targetId?: string;
-  /** World-space destination the agent walks to before performing. */
   targetPos: Vec2;
   startedTick: number;
   durationTicks: number;
-  /** Ticks spent performing while in range, 0..durationTicks. */
   progress: number;
-  /** True once the agent has reached targetPos and is performing. */
   inRange: boolean;
+}
+
+export type JournalKind =
+  | 'need'
+  | 'danger'
+  | 'build'
+  | 'death'
+  | 'mood'
+  | 'day'
+  | 'season'
+  | 'weather'
+  | 'discovery'
+  | 'social'
+  | 'birth';
+
+export interface JournalEntry {
+  day: number;
+  hour: number;
+  kind: JournalKind;
+  weight: 1 | 2 | 3; // 3 = must appear in a summary
+  text: string; // Hebrew, generated from a template + state
 }
 
 export interface Agent {
   id: string;
   name: string;
   needs: Record<NeedKey, number>;
+  health: number;
+  alive: boolean;
+  deathCause?: string;
+  /** Stored food the agent lives off (SPEC character economy). */
+  foodStock: number;
   position: Vec2;
   currentAction: ActiveAction | null;
 }
 
+/** One-time milestones, so a journal line is written once, not every tick. */
+export interface Milestones {
+  builtShelter: boolean;
+  madeFire: boolean;
+  firstGather: boolean;
+  inCrisis: boolean;
+  survivedWinters: number;
+  lastSeason: Season;
+  lastWeather: Weather;
+}
+
 export interface WorldState {
   seed: number;
-  /** Master clock. day and hour are derived from this and kept in sync. */
   tick: number;
   day: number;
   hour: number;
-  /** Serializable RNG state for the simulation stream (see rng.ts). */
   rngState: number;
 
-  agent: Agent;
+  season: Season;
+  weather: Weather;
+  aiProfile: AiProfile;
 
-  // Derived-from-seed, rebuilt on load; present here so the sim is self-contained.
+  agent: Agent;
+  structures: Structure[];
+  journal: JournalEntry[];
+  milestones: Milestones;
+
+  // Derived-from-seed, rebuilt on load.
   terrain: TerrainData;
   resources: ResourceNode[];
 }
 
-/** The subset of WorldState that is persisted; the rest is rebuilt from seed. */
+/** The subset of WorldState that is persisted; terrain is rebuilt from seed. */
 export interface SavedWorld {
   seed: number;
   tick: number;
   day: number;
   hour: number;
   rngState: number;
+  season: Season;
+  weather: Weather;
+  aiProfile: AiProfile;
   agent: Agent;
+  structures: Structure[];
+  resources: ResourceNode[];
+  journal: JournalEntry[];
+  milestones: Milestones;
 }

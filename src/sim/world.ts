@@ -1,38 +1,58 @@
 // The heart of the sim: a PURE tick function. Same state + same seed + same
-// number of ticks => identical result. No react, no three, no DOM, no
-// Math.random (CLAUDE.md iron rule + determinism rule).
+// number of ticks => identical result. No react/three/DOM, no Math.random
+// (CLAUDE.md iron rule + determinism rule).
 
-import type { WorldState, Agent, ActiveAction, NeedKey, SavedWorld } from './types';
+import type {
+  WorldState,
+  Agent,
+  ActiveAction,
+  SavedWorld,
+  Structure,
+  ResourceNode,
+  AiProfile,
+} from './types';
 import { Rng, deriveSeed } from './rng';
 import { generateTerrain } from './terrain';
-import { generateResources } from './resources';
+import { generateResources, regrowResources } from './resources';
+import { deriveSeason, rollWeather, wintersElapsed } from './season';
+import { applyNeedDecay, clampNeeds } from './needs';
+import { updateHealth } from './health';
+import { burnFires } from './structures';
 import { ACTIONS } from './actions';
 import { decide } from './utility';
 import {
-  NEED_DECAY_PER_DAY,
+  pushSeason,
+  pushWeather,
+  pushDaySummary,
+  pushBuild,
+  pushFirstGather,
+  pushCrisis,
+  pushDeath,
+} from './events';
+import {
+  NEED_KEYS,
   NEED_START,
+  HEALTH_START,
   TICKS_PER_DAY,
   TICKS_PER_HOUR,
   MOVE_SPEED,
   ARRIVE_RADIUS,
 } from './balance';
 
-const NEED_KEYS: readonly NeedKey[] = ['hunger', 'thirst', 'fatigue'];
-
-// A few Hebrew given names so the agent has an identity in the UI/log.
-const NAMES = ['נועה', 'איתן', 'מאיה', 'יונתן', 'תמר', 'אורי', 'שירה', 'עומר'] as const;
+// Feminine given names, matching the SPEC's journal voice ("נועה מצאה...").
+const NAMES = ['נועה', 'מאיה', 'תמר', 'שירה', 'יעל', 'רוני', 'דנה', 'הדס', 'אביגיל', 'ליבי'] as const;
 
 /** Build a fresh world from a seed. Deterministic. */
-export function createWorld(seed: number): WorldState {
+export function createWorld(seed: number, aiProfile: AiProfile = 'sensible'): WorldState {
   const nameRng = new Rng(deriveSeed(seed, 'name'));
+  const season = deriveSeason(0);
   const agent: Agent = {
     id: 'a0',
     name: nameRng.pick(NAMES),
-    needs: {
-      hunger: NEED_START.hunger,
-      thirst: NEED_START.thirst,
-      fatigue: NEED_START.fatigue,
-    },
+    needs: { ...NEED_START },
+    health: HEALTH_START,
+    alive: true,
+    foodStock: 0,
     position: { x: 0, z: 0 },
     currentAction: null,
   };
@@ -43,27 +63,32 @@ export function createWorld(seed: number): WorldState {
     day: 0,
     hour: 0,
     rngState: deriveSeed(seed, 'sim'),
+    season,
+    weather: 'clear',
+    aiProfile,
     agent,
+    structures: [],
+    journal: [],
+    milestones: {
+      builtShelter: false,
+      madeFire: false,
+      firstGather: false,
+      inCrisis: false,
+      survivedWinters: 0,
+      lastSeason: season,
+      lastWeather: 'clear',
+    },
     terrain: generateTerrain(seed),
     resources: generateResources(seed),
   };
 }
 
-/**
- * Advance the world by `ticks` ticks. Returns a NEW state; the input is never
- * mutated. Immutable, seed-derived data (terrain, resources) is shared by
- * reference — it is never written to.
- */
+/** Advance by `ticks`. Returns a NEW state; the input is never mutated. */
 export function tick(state: WorldState, ticks: number): WorldState {
   const next = cloneState(state);
   if (ticks <= 0) return next;
-
-  // One RNG for the whole batch, resumed from and written back to state so the
-  // stream continues seamlessly across tick() calls and save/load.
   const rng = new Rng(next.rngState);
-  for (let i = 0; i < ticks; i++) {
-    tickOnce(next, rng);
-  }
+  for (let i = 0; i < ticks; i++) tickOnce(next, rng);
   next.rngState = rng.getState();
   return next;
 }
@@ -71,19 +96,48 @@ export function tick(state: WorldState, ticks: number): WorldState {
 function tickOnce(state: WorldState, rng: Rng): void {
   const agent = state.agent;
 
-  // 1. Advance the clock. `tick` is the master; day/hour are derived.
+  // 1. Advance the clock.
+  const prevDay = state.day;
   state.tick += 1;
   state.day = Math.floor(state.tick / TICKS_PER_DAY);
   state.hour = Math.floor((state.tick % TICKS_PER_DAY) / TICKS_PER_HOUR);
+  const newDay = state.day !== prevDay;
 
-  // 2. Needs decay toward distress.
-  for (const key of NEED_KEYS) {
-    agent.needs[key] += NEED_DECAY_PER_DAY[key] / TICKS_PER_DAY;
+  // A dead agent's world stops advancing (generations arrive in stage 4).
+  if (!agent.alive) return;
+
+  // 2. Daily bookkeeping: season, weather, regrowth, summary.
+  if (newDay) {
+    const season = deriveSeason(state.day);
+    if (season !== state.season) {
+      state.season = season;
+      pushSeason(state, rng);
+    }
+    const weather = rollWeather(state.season, rng);
+    const changed = weather !== state.weather;
+    state.weather = weather;
+    if (changed) pushWeather(state, rng);
+
+    regrowResources(state.resources, state.season);
+    state.milestones.survivedWinters = wintersElapsed(state.day);
+    pushDaySummary(state, rng);
   }
-  clampNeeds(agent);
 
-  // 3. Decide what to do (with hysteresis), and commit a target if the choice
-  //    changed or there is no active action.
+  // 3. Fires burn down.
+  burnFires(state);
+
+  // 4. Needs decay.
+  applyNeedDecay(state);
+
+  // 5. Health & death.
+  const health = updateHealth(state);
+  if (health.justDied) {
+    pushDeath(state);
+    return;
+  }
+  if (health.enteredCrisis) pushCrisis(state);
+
+  // 6. Decide (hysteresis) and commit a target if the choice changed.
   const { best } = decide(agent, state);
   const active = agent.currentAction;
   if (!active || active.type !== best.id) {
@@ -102,12 +156,13 @@ function tickOnce(state: WorldState, rng: Rng): void {
     }
   }
 
-  // 4. Move toward the target, then perform once in range.
-  moveAndPerform(agent);
-  clampNeeds(agent);
+  // 7. Move toward the target, then perform once in range.
+  moveAndPerform(state);
+  clampNeeds(state);
 }
 
-function moveAndPerform(agent: Agent): void {
+function moveAndPerform(state: WorldState): void {
+  const agent = state.agent;
   const act = agent.currentAction;
   if (!act) return;
 
@@ -125,21 +180,33 @@ function moveAndPerform(agent: Agent): void {
     }
   }
 
-  if (act.inRange) {
-    const effect = ACTIONS[act.type].effect;
-    for (const key of NEED_KEYS) {
-      const delta = effect[key];
-      if (delta !== undefined) agent.needs[key] += delta;
-    }
-    act.progress += 1;
-    if (act.progress >= act.durationTicks) {
-      // Action complete; the next tick re-decides from scratch.
-      agent.currentAction = null;
-    }
+  if (!act.inRange) return;
+
+  const def = ACTIONS[act.type];
+  for (const key of NEED_KEYS) {
+    const delta = def.effect[key];
+    if (delta !== undefined) agent.needs[key] += delta;
+  }
+
+  const beforeStock = agent.foodStock;
+  if (def.performTick) def.performTick(state);
+  if (act.type === 'gather' && !state.milestones.firstGather && agent.foodStock > beforeStock) {
+    state.milestones.firstGather = true;
+    pushFirstGather(state);
+  }
+
+  act.progress += 1;
+  if (act.progress >= act.durationTicks) {
+    const hadShelter = state.milestones.builtShelter;
+    const hadFire = state.milestones.madeFire;
+    if (def.onComplete) def.onComplete(state);
+    if (!hadShelter && state.milestones.builtShelter) pushBuild(state, 'shelter');
+    if (!hadFire && state.milestones.madeFire) pushBuild(state, 'fire');
+    agent.currentAction = null;
   }
 }
 
-/** Extract the persistable subset (terrain/resources are rebuilt from seed). */
+/** Extract the persistable subset (terrain is rebuilt from seed). */
 export function toSaved(state: WorldState): SavedWorld {
   return {
     seed: state.seed,
@@ -147,11 +214,18 @@ export function toSaved(state: WorldState): SavedWorld {
     day: state.day,
     hour: state.hour,
     rngState: state.rngState,
+    season: state.season,
+    weather: state.weather,
+    aiProfile: state.aiProfile,
     agent: cloneAgent(state.agent),
+    structures: state.structures.map(cloneStructure),
+    resources: state.resources.map(cloneResource),
+    journal: state.journal.slice(),
+    milestones: { ...state.milestones },
   };
 }
 
-/** Rebuild a full WorldState from a saved subset, regenerating terrain/resources. */
+/** Rebuild a full WorldState from a saved subset, regenerating terrain. */
 export function hydrate(saved: SavedWorld): WorldState {
   return {
     seed: saved.seed,
@@ -159,28 +233,40 @@ export function hydrate(saved: SavedWorld): WorldState {
     day: saved.day,
     hour: saved.hour,
     rngState: saved.rngState,
+    season: saved.season,
+    weather: saved.weather,
+    aiProfile: saved.aiProfile,
     agent: cloneAgent(saved.agent),
+    structures: saved.structures.map(cloneStructure),
+    resources: saved.resources.map(cloneResource),
+    journal: saved.journal.slice(),
+    milestones: { ...saved.milestones },
     terrain: generateTerrain(saved.seed),
-    resources: generateResources(saved.seed),
   };
-}
-
-function clampNeeds(agent: Agent): void {
-  for (const key of NEED_KEYS) {
-    const v = agent.needs[key];
-    agent.needs[key] = v < 0 ? 0 : v > 100 ? 100 : v;
-  }
 }
 
 function cloneAgent(a: Agent): Agent {
   const action = a.currentAction;
-  return {
+  const cloned: Agent = {
     id: a.id,
     name: a.name,
     needs: { ...a.needs },
+    health: a.health,
+    alive: a.alive,
+    foodStock: a.foodStock,
     position: { ...a.position },
     currentAction: action ? { ...action, targetPos: { ...action.targetPos } } : null,
   };
+  if (a.deathCause !== undefined) cloned.deathCause = a.deathCause;
+  return cloned;
+}
+
+function cloneStructure(s: Structure): Structure {
+  return { id: s.id, type: s.type, position: { ...s.position }, fuel: s.fuel };
+}
+
+function cloneResource(r: ResourceNode): ResourceNode {
+  return { id: r.id, type: r.type, position: { ...r.position }, quantity: r.quantity };
 }
 
 function cloneState(s: WorldState): WorldState {
@@ -190,9 +276,14 @@ function cloneState(s: WorldState): WorldState {
     day: s.day,
     hour: s.hour,
     rngState: s.rngState,
+    season: s.season,
+    weather: s.weather,
+    aiProfile: s.aiProfile,
     agent: cloneAgent(s.agent),
-    // Immutable, seed-derived — safe to share by reference.
-    terrain: s.terrain,
-    resources: s.resources,
+    structures: s.structures.map(cloneStructure),
+    resources: s.resources.map(cloneResource),
+    journal: s.journal.slice(),
+    milestones: { ...s.milestones },
+    terrain: s.terrain, // immutable, seed-derived — safe to share
   };
 }

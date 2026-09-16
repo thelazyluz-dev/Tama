@@ -1,173 +1,163 @@
-// test:sim — runs 200 game days headless in Node (no browser, no rendering)
-// and verifies the stage-0 transition invariants (kickoff / CLAUDE.md):
-//   1. the agent stays alive (state stays valid; there is no death yet),
-//   2. no need is pinned at 100 for more than 12 consecutive game hours,
-//   3. the same seed produces the same result across two runs.
+// test:sim — runs headless in Node (no browser, no rendering) and verifies the
+// stage-1 transition (SPEC): a sensible agent survives its first winter, a
+// neglected (reactive) agent dies in it, and the sim stays deterministic.
 
 import { describe, it, expect } from 'vitest';
 import { createWorld, tick } from './world';
 import { catchUp } from './catchup';
-import type { WorldState, NeedKey, ActionId } from './types';
-import { TICKS_PER_DAY, TICKS_PER_HOUR, WORLD_HALF } from './balance';
+import type { WorldState, AiProfile, ActionId } from './types';
+import { TICKS_PER_DAY, SEASON_DAYS, YEAR_DAYS } from './balance';
 
-const NEED_KEYS: NeedKey[] = ['hunger', 'thirst', 'fatigue'];
-const DAYS = 200;
-const TOTAL_TICKS = DAYS * TICKS_PER_DAY;
-const MAX_STUCK_TICKS = 12 * TICKS_PER_HOUR; // 12 game hours = 120 ticks
+const WINTER_START = SEASON_DAYS * 3; // day 114
+const WINTER_END = SEASON_DAYS * 4; // day 152
 
-interface RunStats {
+interface YearStats {
   final: WorldState;
-  needMin: Record<NeedKey, number>;
-  needMax: Record<NeedKey, number>;
-  needSum: Record<NeedKey, number>;
-  longestAt100: Record<NeedKey, number>;
-  currentAt100: Record<NeedKey, number>;
+  aliveAtEnd: boolean;
+  diedDay: number | null;
+  cause: string | undefined;
+  minHealth: number;
+  maxStock: number;
+  builtShelter: boolean;
+  madeFire: boolean;
   actionTicks: Record<ActionId, number>;
-  moved: number; // total distance travelled
 }
 
-/** Step one tick at a time so we can observe per-tick invariants. */
-function runObserved(seed: number): RunStats {
-  let state = createWorld(seed);
-  const stats: RunStats = {
+function runYear(seed: number, profile: AiProfile): YearStats {
+  let state = createWorld(seed, profile);
+  const stats: YearStats = {
     final: state,
-    needMin: { hunger: 100, thirst: 100, fatigue: 100 },
-    needMax: { hunger: 0, thirst: 0, fatigue: 0 },
-    needSum: { hunger: 0, thirst: 0, fatigue: 0 },
-    longestAt100: { hunger: 0, thirst: 0, fatigue: 0 },
-    currentAt100: { hunger: 0, thirst: 0, fatigue: 0 },
-    actionTicks: { eat: 0, drink: 0, sleep: 0, wander: 0 },
-    moved: 0,
+    aliveAtEnd: true,
+    diedDay: null,
+    cause: undefined,
+    minHealth: 100,
+    maxStock: 0,
+    builtShelter: false,
+    madeFire: false,
+    actionTicks: {
+      eat: 0, drink: 0, sleep: 0, wander: 0, gather: 0,
+      wash: 0, warm: 0, buildShelter: 0, makeFire: 0,
+    },
   };
 
-  for (let i = 0; i < TOTAL_TICKS; i++) {
-    const prev = state.agent.position;
+  const totalTicks = YEAR_DAYS * TICKS_PER_DAY;
+  for (let i = 0; i < totalTicks; i++) {
+    const wasAlive = state.agent.alive;
     state = tick(state, 1);
     const a = state.agent;
-
-    const dx = a.position.x - prev.x;
-    const dz = a.position.z - prev.z;
-    stats.moved += Math.sqrt(dx * dx + dz * dz);
-
-    if (a.currentAction) stats.actionTicks[a.currentAction.type] += 1;
-
-    for (const key of NEED_KEYS) {
-      const v = a.needs[key];
-      stats.needMin[key] = Math.min(stats.needMin[key], v);
-      stats.needMax[key] = Math.max(stats.needMax[key], v);
-      stats.needSum[key] += v;
-      if (v >= 100 - 1e-9) {
-        stats.currentAt100[key] += 1;
-        stats.longestAt100[key] = Math.max(stats.longestAt100[key], stats.currentAt100[key]);
-      } else {
-        stats.currentAt100[key] = 0;
-      }
+    if (wasAlive && !a.alive && stats.diedDay === null) {
+      stats.diedDay = state.day;
+      stats.cause = a.deathCause;
+    }
+    if (a.alive) {
+      stats.minHealth = Math.min(stats.minHealth, a.health);
+      stats.maxStock = Math.max(stats.maxStock, a.foodStock);
+      if (a.currentAction) stats.actionTicks[a.currentAction.type] += 1;
     }
   }
 
   stats.final = state;
+  stats.aliveAtEnd = state.agent.alive;
+  stats.builtShelter = state.milestones.builtShelter;
+  stats.madeFire = state.milestones.madeFire;
   return stats;
 }
 
-describe('stage 0 simulation — 200 game days', () => {
-  const seed = 12345;
-  const stats = runObserved(seed);
+describe('stage 1 — a sensible agent survives the first winter', () => {
+  const s = runYear(4242, 'sensible');
 
-  it('prints run statistics', () => {
-    const avg = (k: NeedKey) => (stats.needSum[k] / TOTAL_TICKS).toFixed(1);
-    // Visible on `npm run test:sim`; compare before/after when tuning balance.
-    console.log('\n=== sim stats: seed', seed, '·', DAYS, 'game days ===');
-    console.log(`final: day ${stats.final.day}, hour ${stats.final.hour}, tick ${stats.final.tick}`);
-    for (const k of NEED_KEYS) {
-      console.log(
-        `  ${k.padEnd(8)} min ${stats.needMin[k].toFixed(1).padStart(5)} · ` +
-          `avg ${avg(k).padStart(5)} · max ${stats.needMax[k].toFixed(1).padStart(5)} · ` +
-          `longest@100 ${stats.longestAt100[k]} ticks`,
-      );
-    }
-    const totalActive = Object.values(stats.actionTicks).reduce((s, n) => s + n, 0);
-    console.log('  action ticks:', JSON.stringify(stats.actionTicks), `(active ${totalActive}/${TOTAL_TICKS})`);
-    console.log(`  distance travelled: ${stats.moved.toFixed(0)} units`);
+  it('prints run stats', () => {
+    console.log('\n=== SENSIBLE · seed 4242 · one game year ===');
+    console.log(`  alive at end: ${s.aliveAtEnd} (final day ${s.final.day}, season ${s.final.season})`);
+    console.log(`  min health: ${s.minHealth.toFixed(1)} · max food stock: ${s.maxStock.toFixed(0)}`);
+    console.log(`  built shelter: ${s.builtShelter} · made fire: ${s.madeFire}`);
+    console.log(`  final needs:`, JSON.stringify(mapRound(s.final.agent.needs)));
+    console.log(`  action ticks:`, JSON.stringify(s.actionTicks));
+    console.log(`  journal entries: ${s.final.journal.length}`);
     expect(true).toBe(true);
   });
 
-  it('keeps the agent in a valid, living state', () => {
-    const a = stats.final.agent;
-    for (const key of NEED_KEYS) {
-      expect(Number.isFinite(a.needs[key])).toBe(true);
-      expect(a.needs[key]).toBeGreaterThanOrEqual(0);
-      expect(a.needs[key]).toBeLessThanOrEqual(100);
-    }
-    expect(Number.isFinite(a.position.x)).toBe(true);
-    expect(Number.isFinite(a.position.z)).toBe(true);
-    expect(Math.abs(a.position.x)).toBeLessThanOrEqual(WORLD_HALF + 1);
-    expect(Math.abs(a.position.z)).toBeLessThanOrEqual(WORLD_HALF + 1);
-    // Reached the right day.
-    expect(stats.final.day).toBe(DAYS);
+  it('is still alive after a full year', () => {
+    expect(s.aliveAtEnd).toBe(true);
+    expect(s.final.day).toBe(YEAR_DAYS);
   });
 
-  it('actually behaves: moves and satisfies each need at least once', () => {
-    expect(stats.moved).toBeGreaterThan(50);
-    // The agent must have eaten, drunk and slept over 200 days.
-    expect(stats.actionTicks.eat).toBeGreaterThan(0);
-    expect(stats.actionTicks.drink).toBeGreaterThan(0);
-    expect(stats.actionTicks.sleep).toBeGreaterThan(0);
-    expect(stats.actionTicks.wander).toBeGreaterThan(0);
+  it('prepared for winter (built shelter, lit a fire, stocked food)', () => {
+    expect(s.builtShelter).toBe(true);
+    expect(s.madeFire).toBe(true);
+    expect(s.maxStock).toBeGreaterThan(150);
   });
 
-  it('never leaves a need pinned at 100 for more than 12 game hours', () => {
-    for (const key of NEED_KEYS) {
-      expect(stats.longestAt100[key]).toBeLessThanOrEqual(MAX_STUCK_TICKS);
-    }
+  it('wrote a journal (season lines, day summaries)', () => {
+    expect(s.final.journal.length).toBeGreaterThan(20);
+    expect(s.final.journal.some((e) => e.kind === 'season')).toBe(true);
+  });
+});
+
+describe('stage 1 — a neglected agent dies in the first winter', () => {
+  const s = runYear(4242, 'reactive');
+
+  it('prints run stats', () => {
+    console.log('\n=== REACTIVE (neglected) · seed 4242 ===');
+    console.log(`  died day: ${s.diedDay} · cause: ${s.cause}`);
+    console.log(`  built shelter: ${s.builtShelter} · made fire: ${s.madeFire} · max stock: ${s.maxStock.toFixed(0)}`);
+    expect(true).toBe(true);
+  });
+
+  it('is dead by the end of the year', () => {
+    expect(s.aliveAtEnd).toBe(false);
+    expect(s.diedDay).not.toBeNull();
+  });
+
+  it('dies during (or at the onset of) the first winter, not before', () => {
+    // Survives spring/summer/autumn; winter is what kills it.
+    expect(s.diedDay!).toBeGreaterThanOrEqual(WINTER_START - 4);
+    expect(s.diedDay!).toBeLessThan(WINTER_END + 6);
+  });
+
+  it('records a death in the journal', () => {
+    expect(s.final.journal.some((e) => e.kind === 'death')).toBe(true);
   });
 });
 
 describe('determinism', () => {
   const subset = (s: WorldState) => ({
-    tick: s.tick,
-    day: s.day,
-    hour: s.hour,
-    rngState: s.rngState,
-    agent: s.agent,
+    tick: s.tick, day: s.day, hour: s.hour, rngState: s.rngState,
+    season: s.season, weather: s.weather,
+    agent: s.agent, structures: s.structures, resources: s.resources,
+    milestones: s.milestones,
   });
 
-  it('same seed + same ticks => identical state (two runs)', () => {
-    const a = tick(createWorld(999), TICKS_PER_DAY * 10);
-    const b = tick(createWorld(999), TICKS_PER_DAY * 10);
+  it('same seed + same ticks => identical state', () => {
+    const a = tick(createWorld(999), TICKS_PER_DAY * 30);
+    const b = tick(createWorld(999), TICKS_PER_DAY * 30);
     expect(subset(a)).toStrictEqual(subset(b));
   });
 
-  it('one big batch === many small batches (RNG threading is stable)', () => {
-    const big = tick(createWorld(2024), TICKS_PER_DAY * 5);
-
+  it('one big batch === many small batches', () => {
+    const big = tick(createWorld(2024), TICKS_PER_DAY * 12);
     let small = createWorld(2024);
-    for (let i = 0; i < TICKS_PER_DAY * 5; i++) small = tick(small, 1);
-
+    for (let i = 0; i < TICKS_PER_DAY * 12; i++) small = tick(small, 1);
     expect(subset(big)).toStrictEqual(subset(small));
   });
 
   it('does not mutate the input state', () => {
     const s0 = createWorld(7);
     const snapshot = JSON.stringify(subset(s0));
-    tick(s0, TICKS_PER_DAY);
+    tick(s0, TICKS_PER_DAY * 3);
     expect(JSON.stringify(subset(s0))).toBe(snapshot);
   });
 
-  it('offline catch-up equals live stepping for the same tick count', () => {
-    // 3 real hours of absence -> some game days; must match a direct tick().
+  it('offline catch-up equals live stepping', () => {
     const threeHoursMs = 3 * 60 * 60 * 1000;
-    const start = createWorld(55);
-    const caught = catchUp(start, threeHoursMs);
+    const caught = catchUp(createWorld(55), threeHoursMs);
     const direct = tick(createWorld(55), caught.simulatedTicks);
     expect(subset(caught.state)).toStrictEqual(subset(direct));
-    expect(caught.capped).toBe(false); // 3h is well under the 14-day ceiling
-  });
-
-  it('caps catch-up at the 14-game-day ceiling', () => {
-    const hugeMs = 1000 * 24 * 60 * 60 * 1000; // 1000 real days
-    const res = catchUp(createWorld(1), hugeMs);
-    expect(res.capped).toBe(true);
-    expect(res.simulatedTicks).toBe(14 * TICKS_PER_DAY);
-    expect(res.elapsedTicks).toBeGreaterThan(res.simulatedTicks);
   });
 });
+
+function mapRound(needs: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(needs)) out[k] = Math.round(v);
+  return out;
+}

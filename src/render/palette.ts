@@ -8,6 +8,11 @@ export const ACTION_COLOR: Record<ActionId, string> = {
   drink: '#4a90d9', // blue
   sleep: '#8e6fd6', // purple
   wander: '#d7dbe0', // pale idle
+  gather: '#c7a33a', // amber — harvesting
+  wash: '#3fc4c4', // teal
+  warm: '#e07a3a', // ember orange
+  buildShelter: '#a9764e', // timber brown
+  makeFire: '#e0562f', // fire red
 };
 
 /** Resource node colors (SPEC: blue = water, green = fruit). */
