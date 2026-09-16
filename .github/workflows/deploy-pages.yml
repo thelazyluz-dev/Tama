@@ -26,9 +26,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # Pages must already be enabled with "GitHub Actions" as the source
+      # (Settings -> Pages). The token cannot create the site itself.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
