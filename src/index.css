@@ -53,8 +53,157 @@ body {
   position: absolute;
   top: 16px;
   right: 16px;
-  width: 240px;
+  width: 288px;
+  max-width: calc(100vw - 32px);
   padding: 12px 14px;
+}
+
+.status-env {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
+}
+
+.chip.subtle {
+  color: var(--text-dim);
+}
+
+.chip.food {
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.health-row {
+  margin-bottom: 10px;
+}
+
+.health-row .need-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.health-row .need-bar {
+  height: 11px;
+}
+
+.needs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+}
+
+.needs-grid .need-label {
+  font-size: 12px;
+}
+
+.needs-grid .need-row {
+  grid-template-columns: 40px 1fr 22px;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.needs-grid .need-bar {
+  height: 8px;
+}
+
+/* ---- Journal panel ---- */
+.journal-panel {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  max-height: 44vh;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 6px 10px 12px;
+}
+
+.journal-head {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-dim);
+  padding: 0 6px 8px 0;
+  border-bottom: 1px solid var(--panel-border);
+  margin-bottom: 6px;
+}
+
+.journal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 6px 0 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.journal-entry {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.35;
+  align-items: baseline;
+}
+
+.journal-day {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.journal-text {
+  color: #d7dee8;
+}
+
+.journal-entry.j-strong .journal-text {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.journal-entry.j-season .journal-text {
+  color: #8fd0ff;
+}
+
+.journal-entry.j-build .journal-text {
+  color: #86e0a0;
+}
+
+.journal-entry.j-danger .journal-text {
+  color: #f0b45a;
+}
+
+.journal-entry.j-death .journal-text {
+  color: #ff7d7d;
+  font-weight: 700;
+}
+
+.journal-empty {
+  color: var(--text-dim);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.death-epitaph {
+  margin: 10px 0 18px;
+  font-style: italic;
+  color: #ff9d9d;
+  font-size: 15px;
+}
+
+.death-overlay {
+  background: radial-gradient(circle at 50% 40%, rgba(40, 8, 8, 0.7), rgba(8, 4, 6, 0.94));
 }
 
 .status-head {

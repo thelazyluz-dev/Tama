@@ -2,7 +2,7 @@
 // Starts the real-time loop. No sim logic lives here.
 
 import { GameCanvas } from './render';
-import { StatusPanel, SpeedControls, ReturnScreen } from './ui';
+import { StatusPanel, SpeedControls, ReturnScreen, JournalPanel, DeathScreen } from './ui';
 import { useGameLoop, useGameStore } from './store';
 
 export function App(): JSX.Element {
@@ -14,9 +14,11 @@ export function App(): JSX.Element {
       <GameCanvas />
       <div className="hud">
         <StatusPanel />
+        <JournalPanel />
         <SpeedControls />
       </div>
       {phase === 'return' && <ReturnScreen />}
+      <DeathScreen />
     </div>
   );
 }

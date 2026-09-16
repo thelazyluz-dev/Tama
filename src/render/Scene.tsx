@@ -7,6 +7,8 @@ import { WORLD_HALF } from '../sim';
 import { Terrain } from './Terrain';
 import { Resources } from './Resources';
 import { Agent } from './Agent';
+import { Structures } from './Structures';
+import { Weather } from './Weather';
 import { DayNight } from './DayNight';
 
 export function Scene(): JSX.Element {
@@ -20,6 +22,8 @@ export function Scene(): JSX.Element {
       <DayNight />
       <Terrain terrain={terrain} />
       <Resources resources={resources} terrain={terrain} />
+      <Structures terrain={terrain} />
+      <Weather />
       <Agent />
       <OrbitControls
         target={[0, 1, 0]}

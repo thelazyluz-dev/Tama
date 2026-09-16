@@ -5,7 +5,7 @@
 import { create } from 'zustand';
 import type { WorldState } from '../sim';
 import { createWorld, tick, toSaved, hydrate, catchUp, ticksToDaysHours, SPEED_STEPS } from '../sim';
-import { saveGame, loadGame } from './persistence';
+import { saveGame, loadGame, clearGame } from './persistence';
 
 export type Phase = 'return' | 'playing';
 
@@ -29,6 +29,8 @@ export interface GameStore {
   setSpeed: (speed: number) => void;
   /** Persist the current world with a fresh timestamp (on leave/hide). */
   persistNow: () => void;
+  /** Abandon the current valley and start a fresh one (e.g. after death). */
+  newGame: () => void;
 }
 
 interface Boot {
@@ -88,4 +90,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setSpeed: (speed) => set({ speed }),
 
   persistNow: () => saveGame(toSaved(get().world), Date.now()),
+
+  newGame: () => {
+    clearGame();
+    const now = Date.now();
+    const seed = ((now >>> 0) ^ 0x9e3779b9) >>> 0;
+    const world = createWorld(seed);
+    saveGame(toSaved(world), now);
+    set({ world, phase: 'playing', catchUp: null, speed: SPEED_STEPS[0] });
+  },
 }));

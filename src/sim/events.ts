@@ -45,16 +45,31 @@ const WEATHER_LINES: Partial<Record<Weather, string[]>> = {
   heat: ['גל חום כבד יושב על העמק.'],
 };
 
-const NEED_TROUBLE: Partial<Record<NeedKey, string>> = {
-  hunger: 'הרעב מציק',
-  thirst: 'הצמא מכביד',
-  fatigue: 'העייפות משתלטת',
-  warmth: 'הקור חודר לעצמות',
-  hygiene: 'הליכלוך מטריד',
-  loneliness: 'הבדידות מכרסמת',
-  boredom: 'השעמום מעיק',
-  safety: 'תחושת סכנה באוויר',
+// Survival needs whose distress is worth a day-summary spotlight, with a small
+// variant bank each so the journal doesn't read the same line every day.
+const SURVIVAL_NEEDS: NeedKey[] = ['warmth', 'thirst', 'hunger', 'fatigue', 'safety'];
+const TROUBLE_LINES: Partial<Record<NeedKey, string[]>> = {
+  warmth: ['הקור חדר לעצמות, אבל היום נגמר.', 'יום קפוא. הרוח לא הרפתה לרגע.'],
+  thirst: ['הצמא הכביד, עד שנמצאו מים.', 'יום יבש. הגרון ניחר.'],
+  hunger: ['הרעב הציק לאורך כל היום.', 'הבטן קרקרה עד הערב.'],
+  fatigue: ['העייפות השתלטה. הגוף דורש שינה.', 'הרגליים כבדו מהיום הארוך.'],
+  safety: ['הסערה הפחידה. חיפשה מחסה.', 'יום מסוכן. העמק לא היה שקט.'],
 };
+
+// Quiet-day lines, some of which acknowledge the solitude of the first life.
+const QUIET_LINES = [
+  'יום רגוע בעמק. הכל מסופק.',
+  'יום שקט. השמש עשתה את שלה.',
+  'עוד יום עבר בשלווה על הגבעות.',
+  'יום טוב, אבל בערב שוב הבדידות.',
+  'העמק יפה — חבל שאין עם מי לחלוק אותו.',
+  'יום של עבודה. הכפיים עשו את שלהן.',
+];
+
+const HARD_LINES = [
+  'יום קשה. הבריאות שוחקת והכוחות אוזלים.',
+  'יום על הסף. הגוף בקושי מחזיק מעמד.',
+];
 
 /** Season rollover line (weight 3 — belongs in any summary). */
 export function pushSeason(state: WorldState, rng: Rng): void {
@@ -75,14 +90,14 @@ export function pushDaySummary(state: WorldState, rng: Rng): void {
   if (!a.alive) return;
 
   if (a.health < 30) {
-    add(state, 'day', 3, `${a.name} — יום קשה. הבריאות שוחקת והכוחות אוזלים.`);
+    add(state, 'day', 3, `${a.name} — ${rng.pick(HARD_LINES)}`);
     return;
   }
 
-  // Worst-offending need this moment.
+  // Spotlight the worst *survival* need that is genuinely pressing.
   let worstKey: NeedKey | null = null;
-  let worst = 60; // only mention needs that are genuinely pressing
-  for (const key of Object.keys(NEED_TROUBLE) as NeedKey[]) {
+  let worst = 62;
+  for (const key of SURVIVAL_NEEDS) {
     if (a.needs[key] > worst) {
       worst = a.needs[key];
       worstKey = key;
@@ -90,14 +105,9 @@ export function pushDaySummary(state: WorldState, rng: Rng): void {
   }
 
   if (worstKey) {
-    add(state, 'day', 2, `${a.name} — ${NEED_TROUBLE[worstKey]}, אבל היום עבר.`);
+    add(state, 'day', 2, `${a.name} — ${rng.pick(TROUBLE_LINES[worstKey]!)}`);
   } else {
-    const calm = [
-      'יום רגוע בעמק. הכל מסופק.',
-      'יום שקט. השמש עשתה את שלה.',
-      'עוד יום עבר בשלווה על הגבעות.',
-    ];
-    add(state, 'day', 1, `${a.name} — ${rng.pick(calm)}`);
+    add(state, 'day', 1, `${a.name} — ${rng.pick(QUIET_LINES)}`);
   }
 }
 

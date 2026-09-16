@@ -117,7 +117,7 @@ const sleep: ActionDef = {
 
 const wash: ActionDef = {
   id: 'wash',
-  appeal: (a) => sq(a.needs.hygiene / 100) * 0.9,
+  appeal: (a) => sq(a.needs.hygiene / 100) * 1.05,
   feasibility: (_a, w) => (w.resources.some((r) => r.type === 'water') ? 1 : 0),
   scoringTarget: (a, w) => nearestResource(w.resources, 'water', a.position)?.position ?? a.position,
   commitTarget: (a, w) => {
