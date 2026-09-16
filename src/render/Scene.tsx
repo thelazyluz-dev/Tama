@@ -33,8 +33,8 @@ export function Scene(): JSX.Element {
         enablePan={false}
         enableDamping
         dampingFactor={0.08}
-        minDistance={WORLD_HALF * 0.45}
-        maxDistance={WORLD_HALF * 1.6}
+        minDistance={WORLD_HALF * 0.35}
+        maxDistance={WORLD_HALF * 1.4}
         // Top-side band, no free rotation into the horizon or straight down.
         minPolarAngle={0.55}
         maxPolarAngle={1.05}

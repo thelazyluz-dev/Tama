@@ -2,6 +2,7 @@
 // the eight needs as bars, and the current action. Reads the store; never
 // writes it.
 
+import { useState } from 'react';
 import { useGameStore } from '../store';
 import type { NeedKey } from '../sim';
 import { NEED_KEYS } from '../sim';
@@ -18,12 +19,42 @@ import {
 
 export function StatusPanel(): JSX.Element {
   const world = useGameStore((s) => s.world);
+  const renameAgent = useGameStore((s) => s.renameAgent);
   const agent = world.agent;
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  const startEdit = () => {
+    setDraft(agent.name);
+    setEditing(true);
+  };
+  const commit = () => {
+    renameAgent(draft);
+    setEditing(false);
+  };
 
   return (
     <div className="panel status-panel">
       <div className="status-head">
-        <span className="agent-name">{agent.name}</span>
+        {editing ? (
+          <input
+            className="agent-name-input"
+            value={draft}
+            autoFocus
+            maxLength={20}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit();
+              if (e.key === 'Escape') setEditing(false);
+            }}
+          />
+        ) : (
+          <button type="button" className="agent-name" onClick={startEdit} title="לחצי לשינוי השם">
+            {agent.name} <span className="name-edit-hint">✎</span>
+          </button>
+        )}
         <span className="clock">{clockText(world.day, world.tick)}</span>
       </div>
 

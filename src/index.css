@@ -216,6 +216,57 @@ body {
 .agent-name {
   font-size: 17px;
   font-weight: 700;
+  background: none;
+  border: none;
+  color: var(--text);
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.name-edit-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.agent-name:hover .name-edit-hint {
+  opacity: 1;
+}
+
+.agent-name-input {
+  font-size: 16px;
+  font-weight: 700;
+  width: 130px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  padding: 2px 7px;
+  font-family: inherit;
+}
+
+/* Speech bubble above the agent (rendered via drei <Html>). */
+.agent-bubble {
+  pointer-events: none;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(20, 26, 40, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #eef3fb;
+  font-family: 'Heebo', system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.agent-bubble-emoji {
+  font-size: 16px;
 }
 
 .clock {

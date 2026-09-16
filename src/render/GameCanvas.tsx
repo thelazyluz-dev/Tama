@@ -14,7 +14,7 @@ export function GameCanvas(): JSX.Element {
       shadows
       dpr={[1, 2]}
       camera={{
-        position: [WORLD_HALF * 0.9, WORLD_HALF * 1.15, WORLD_HALF * 0.9],
+        position: [WORLD_HALF * 0.55, WORLD_HALF * 0.8, WORLD_HALF * 0.55],
         fov: 45,
         near: 0.1,
         far: WORLD_HALF * 8,

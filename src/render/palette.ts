@@ -20,3 +20,17 @@ export const RESOURCE_COLOR: Record<ResourceType, string> = {
   water: '#3aa0e0',
   fruit: '#54b04a',
 };
+
+/** Emoji + short Hebrew label shown in the bubble above the agent. Feminine,
+ *  matching the character names. */
+export const ACTION_BUBBLE: Record<ActionId, { emoji: string; label: string }> = {
+  eat: { emoji: '🍎', label: 'אוכלת' },
+  drink: { emoji: '💧', label: 'שותה' },
+  sleep: { emoji: '😴', label: 'ישנה' },
+  wander: { emoji: '🚶', label: 'משוטטת' },
+  gather: { emoji: '🧺', label: 'אוספת' },
+  wash: { emoji: '🫧', label: 'מתרחצת' },
+  warm: { emoji: '🔥', label: 'מתחממת' },
+  buildShelter: { emoji: '🛠️', label: 'בונה מחסה' },
+  makeFire: { emoji: '🔥', label: 'מדליקה אש' },
+};

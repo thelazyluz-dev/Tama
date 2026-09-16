@@ -31,6 +31,8 @@ export interface GameStore {
   persistNow: () => void;
   /** Abandon the current valley and start a fresh one (e.g. after death). */
   newGame: () => void;
+  /** Rename the current agent (a cosmetic the player controls). */
+  renameAgent: (name: string) => void;
 }
 
 interface Boot {
@@ -98,5 +100,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const world = createWorld(seed);
     saveGame(toSaved(world), now);
     set({ world, phase: 'playing', catchUp: null, speed: SPEED_STEPS[0] });
+  },
+
+  renameAgent: (name) => {
+    const trimmed = name.trim().slice(0, 20);
+    if (!trimmed) return;
+    const w = get().world;
+    const world = { ...w, agent: { ...w.agent, name: trimmed } };
+    saveGame(toSaved(world), Date.now());
+    set({ world });
   },
 }));
