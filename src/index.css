@@ -429,3 +429,67 @@ body {
 .return-btn:active {
   transform: translateY(1px);
 }
+
+/* ---- Mobile: shrink panels so they stay in the corners, not over the scene.
+   The camera follows the agent, so the centre of the screen stays clear. ---- */
+@media (max-width: 700px) {
+  .panel {
+    background: rgba(15, 20, 32, 0.66);
+  }
+  .status-panel {
+    width: 190px;
+    padding: 8px 9px;
+    top: 10px;
+    right: 10px;
+    border-radius: 11px;
+  }
+  .agent-name {
+    font-size: 15px;
+  }
+  .status-env {
+    margin-bottom: 7px;
+    gap: 4px;
+  }
+  .chip {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+  .health-row {
+    margin-bottom: 7px;
+  }
+  .needs-grid {
+    gap: 4px 8px;
+  }
+  .needs-grid .need-row {
+    grid-template-columns: 34px 1fr 18px;
+    font-size: 10px;
+  }
+  .need-label {
+    font-size: 10px;
+  }
+  .journal-panel {
+    width: 54vw;
+    max-width: 210px;
+    max-height: 26vh;
+    left: 10px;
+    /* Sit above the speed bar so the two don't overlap. */
+    bottom: 62px;
+    padding: 8px 4px 8px 9px;
+  }
+  .journal-entry {
+    grid-template-columns: 44px 1fr;
+    font-size: 11px;
+    gap: 6px;
+  }
+  .journal-day {
+    font-size: 10px;
+  }
+  .speed-controls {
+    bottom: 10px;
+  }
+  .speed-btn {
+    min-width: 38px;
+    padding: 6px 9px;
+    font-size: 13px;
+  }
+}

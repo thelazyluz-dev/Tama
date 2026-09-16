@@ -33,6 +33,7 @@ import {
   NEED_KEYS,
   NEED_START,
   HEALTH_START,
+  START_HOUR,
   TICKS_PER_DAY,
   TICKS_PER_HOUR,
   MOVE_SPEED,
@@ -57,11 +58,12 @@ export function createWorld(seed: number, aiProfile: AiProfile = 'sensible'): Wo
     currentAction: null,
   };
 
+  const startTick = START_HOUR * TICKS_PER_HOUR; // begin the first day in the morning
   return {
     seed,
-    tick: 0,
+    tick: startTick,
     day: 0,
-    hour: 0,
+    hour: START_HOUR,
     rngState: deriveSeed(seed, 'sim'),
     season,
     weather: 'clear',

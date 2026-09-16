@@ -28,6 +28,9 @@ export const MAX_CATCHUP_TICKS = MAX_CATCHUP_DAYS * TICKS_PER_DAY;
 // In-game speed multipliers (SPEC: ×1 / ×5 / ×20 view buttons).
 export const SPEED_STEPS = [1, 5, 20] as const;
 
+// A new life starts in the morning, not at pitch-black midnight.
+export const START_HOUR = 7;
+
 // ---------------------------------------------------------------------------
 // Seasons & years (SPEC: 4 seasons = 1 game year ≈ 60 real hours)
 // ---------------------------------------------------------------------------

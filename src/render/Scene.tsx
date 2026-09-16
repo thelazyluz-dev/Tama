@@ -10,6 +10,7 @@ import { Agent } from './Agent';
 import { Structures } from './Structures';
 import { Weather } from './Weather';
 import { DayNight } from './DayNight';
+import { CameraRig } from './CameraRig';
 
 export function Scene(): JSX.Element {
   // terrain and resources are shared by reference across ticks, so these
@@ -25,13 +26,15 @@ export function Scene(): JSX.Element {
       <Structures terrain={terrain} />
       <Weather />
       <Agent />
+      <CameraRig />
       <OrbitControls
+        makeDefault
         target={[0, 1, 0]}
         enablePan={false}
         enableDamping
         dampingFactor={0.08}
-        minDistance={WORLD_HALF * 0.7}
-        maxDistance={WORLD_HALF * 2.0}
+        minDistance={WORLD_HALF * 0.45}
+        maxDistance={WORLD_HALF * 1.6}
         // Top-side band, no free rotation into the horizon or straight down.
         minPolarAngle={0.55}
         maxPolarAngle={1.05}

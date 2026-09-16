@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { WORLD_HALF } from '../sim';
 import { Scene } from './Scene';
 
-const INITIAL_SKY = '#0b1026';
+const INITIAL_SKY = '#233251';
 
 export function GameCanvas(): JSX.Element {
   return (

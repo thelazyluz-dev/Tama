@@ -8,12 +8,14 @@ import * as THREE from 'three';
 import { TICKS_PER_DAY, WORLD_HALF } from '../sim';
 import { useGameStore } from '../store';
 
-const NIGHT_SKY = new THREE.Color('#0b1026');
+// Kept deliberately readable: nights are moonlit blue, never pitch black.
+const NIGHT_SKY = new THREE.Color('#233251');
 const DAY_SKY = new THREE.Color('#8ec5ff');
 const WARM_LIGHT = new THREE.Color('#ffb367');
 const NOON_LIGHT = new THREE.Color('#fff6e6');
-const NIGHT_AMBIENT = new THREE.Color('#2a3358');
-const DAY_AMBIENT = new THREE.Color('#dfe9ff');
+const MOON_LIGHT = new THREE.Color('#9fb6e8');
+const NIGHT_AMBIENT = new THREE.Color('#556488');
+const DAY_AMBIENT = new THREE.Color('#eef3ff');
 
 const SUN_DISTANCE = WORLD_HALF * 2.2;
 
@@ -37,23 +39,26 @@ export function DayNight(): JSX.Element {
     // Elevation: -1 at midnight, 0 at dawn/dusk, +1 at noon.
     const elevation = -Math.cos(dayFrac * Math.PI * 2);
     const azimuth = dayFrac * Math.PI * 2;
-    const daylight = smoothstep(-0.15, 0.35, elevation); // 0 night -> 1 day
+    const daylight = smoothstep(-0.28, 0.3, elevation); // 0 night -> 1 day
 
     if (sun.current) {
+      // Keep the key light above the horizon even at night (a "moon").
       sun.current.position.set(
         Math.cos(azimuth) * SUN_DISTANCE,
-        Math.max(elevation, -0.05) * SUN_DISTANCE + 6,
+        Math.max(Math.abs(elevation) * 0.6 + 0.25, 0.25) * SUN_DISTANCE + 6,
         Math.sin(azimuth) * SUN_DISTANCE,
       );
-      sun.current.intensity = 0.15 + 1.05 * daylight;
-      // Warm near the horizon, neutral at noon.
+      sun.current.intensity = 0.5 + 0.85 * daylight; // 0.5 floor = moonlight
       const warmth = 1 - smoothstep(0.15, 0.6, elevation);
-      lightColor.current.copy(NOON_LIGHT).lerp(WARM_LIGHT, warmth * daylight);
+      lightColor.current
+        .copy(NOON_LIGHT)
+        .lerp(WARM_LIGHT, warmth * daylight)
+        .lerp(MOON_LIGHT, 1 - daylight);
       sun.current.color.copy(lightColor.current);
     }
 
     if (ambient.current) {
-      ambient.current.intensity = 0.35 + 0.4 * daylight;
+      ambient.current.intensity = 0.62 + 0.4 * daylight; // bright enough at night
       ambientColor.current.copy(NIGHT_AMBIENT).lerp(DAY_AMBIENT, daylight);
       ambient.current.color.copy(ambientColor.current);
     }

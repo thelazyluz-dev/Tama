@@ -54,6 +54,17 @@ export function Agent(): JSX.Element {
         <capsuleGeometry args={[RADIUS, LENGTH, 6, 16]} />
         <meshStandardMaterial ref={material} roughness={0.6} metalness={0.05} />
       </mesh>
+      {/* Always-lit marker ring so the agent is easy to find, day or night. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -GROUND_OFFSET + 0.06, 0]}>
+        <ringGeometry args={[0.85, 1.15, 28]} />
+        <meshBasicMaterial
+          color="#bfe3ff"
+          transparent
+          opacity={0.5}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
     </group>
   );
 }
