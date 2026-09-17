@@ -18,6 +18,16 @@ export {
 export { applyNeedDecay, efficiency, warmthDecayPerDay, safetyDeltaPerDay } from './needs';
 export { updateHealth } from './health';
 export type { HealthResult } from './health';
+export {
+  TECHS,
+  TECH_LIST,
+  isKnown,
+  fireKnown,
+  availableTechs,
+  gatherMultiplier,
+  hungerReliefMultiplier,
+} from './knowledge';
+export type { Tech } from './knowledge';
 export { ACTIONS, ACTION_LIST } from './actions';
 export type { ActionDef, ResolvedTarget } from './actions';
 export { scoreAction, decide } from './utility';

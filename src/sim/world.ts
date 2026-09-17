@@ -28,12 +28,15 @@ import {
   pushFirstGather,
   pushCrisis,
   pushDeath,
+  pushLightning,
 } from './events';
 import {
   NEED_KEYS,
   NEED_START,
   HEALTH_START,
   START_HOUR,
+  SKILL_START,
+  LIGHTNING_CHANCE_PER_STORM_DAY,
   TICKS_PER_DAY,
   TICKS_PER_HOUR,
   MOVE_SPEED,
@@ -46,6 +49,7 @@ const NAMES = ['נועה', 'מאיה', 'תמר', 'שירה', 'יעל', 'רוני
 /** Build a fresh world from a seed. Deterministic. */
 export function createWorld(seed: number, aiProfile: AiProfile = 'sensible'): WorldState {
   const nameRng = new Rng(deriveSeed(seed, 'name'));
+  const traitRng = new Rng(deriveSeed(seed, 'traits'));
   const season = deriveSeason(0);
   const agent: Agent = {
     id: 'a0',
@@ -54,6 +58,15 @@ export function createWorld(seed: number, aiProfile: AiProfile = 'sensible'): Wo
     health: HEALTH_START,
     alive: true,
     foodStock: 0,
+    traits: {
+      curiosity: traitRng.range(0.4, 0.85),
+      diligence: traitRng.range(0.3, 0.8),
+      sociability: traitRng.range(0.3, 0.8),
+      courage: traitRng.range(0.3, 0.8),
+      temper: traitRng.range(0.2, 0.7),
+      constitution: traitRng.range(0.4, 0.85),
+    },
+    skills: { foraging: SKILL_START, crafting: SKILL_START, firecraft: SKILL_START },
     position: { x: 0, z: 0 },
     currentAction: null,
   };
@@ -80,6 +93,7 @@ export function createWorld(seed: number, aiProfile: AiProfile = 'sensible'): Wo
       lastSeason: season,
       lastWeather: 'clear',
     },
+    knowledge: { known: [], progress: {}, triggers: { lightning: false } },
     terrain: generateTerrain(seed),
     resources: generateResources(seed),
   };
@@ -119,6 +133,16 @@ function tickOnce(state: WorldState, rng: Rng): void {
     const changed = weather !== state.weather;
     state.weather = weather;
     if (changed) pushWeather(state, rng);
+
+    // Lightning on a storm day is fire's environmental trigger (SPEC).
+    if (
+      state.weather === 'storm' &&
+      !state.knowledge.triggers.lightning &&
+      rng.next() < LIGHTNING_CHANCE_PER_STORM_DAY
+    ) {
+      state.knowledge.triggers.lightning = true;
+      pushLightning(state, rng);
+    }
 
     regrowResources(state.resources, state.season);
     state.milestones.survivedWinters = wintersElapsed(state.day);
@@ -224,6 +248,7 @@ export function toSaved(state: WorldState): SavedWorld {
     resources: state.resources.map(cloneResource),
     journal: state.journal.slice(),
     milestones: { ...state.milestones },
+    knowledge: cloneKnowledge(state.knowledge),
   };
 }
 
@@ -243,6 +268,7 @@ export function hydrate(saved: SavedWorld): WorldState {
     resources: saved.resources.map(cloneResource),
     journal: saved.journal.slice(),
     milestones: { ...saved.milestones },
+    knowledge: cloneKnowledge(saved.knowledge),
     terrain: generateTerrain(saved.seed),
   };
 }
@@ -256,6 +282,8 @@ function cloneAgent(a: Agent): Agent {
     health: a.health,
     alive: a.alive,
     foodStock: a.foodStock,
+    traits: { ...a.traits },
+    skills: { ...a.skills },
     position: { ...a.position },
     currentAction: action ? { ...action, targetPos: { ...action.targetPos } } : null,
   };
@@ -269,6 +297,14 @@ function cloneStructure(s: Structure): Structure {
 
 function cloneResource(r: ResourceNode): ResourceNode {
   return { id: r.id, type: r.type, position: { ...r.position }, quantity: r.quantity };
+}
+
+function cloneKnowledge(k: WorldState['knowledge']): WorldState['knowledge'] {
+  return {
+    known: [...k.known],
+    progress: { ...k.progress },
+    triggers: { ...k.triggers },
+  };
 }
 
 function cloneState(s: WorldState): WorldState {
@@ -286,6 +322,7 @@ function cloneState(s: WorldState): WorldState {
     resources: s.resources.map(cloneResource),
     journal: s.journal.slice(),
     milestones: { ...s.milestones },
+    knowledge: cloneKnowledge(s.knowledge),
     terrain: s.terrain, // immutable, seed-derived — safe to share
   };
 }

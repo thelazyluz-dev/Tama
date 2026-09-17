@@ -196,6 +196,7 @@ export const ACTION = {
   gather: { durationTicks: 8, effect: {} },
   buildShelter: { durationTicks: 60, effect: {} },
   makeFire: { durationTicks: 16, effect: {} },
+  experiment: { durationTicks: 14, effect: { boredom: -8 } },
   wander: { durationTicks: 12, effect: { boredom: -30 } },
 } as const;
 
@@ -227,3 +228,33 @@ export const HYSTERESIS = 1.25;
 export const LONELINESS_EFFICIENCY_PENALTY = 0.4; // at loneliness 100
 export const BOREDOM_EFFICIENCY_PENALTY = 0.15; // at boredom 100
 export const MIN_EFFICIENCY = 0.5;
+
+// ---------------------------------------------------------------------------
+// Stage 2 — knowledge & discovery (SPEC "עץ הידע הדורי")
+// ---------------------------------------------------------------------------
+export const TRAIT_KEYS = [
+  'curiosity',
+  'diligence',
+  'sociability',
+  'courage',
+  'temper',
+  'constitution',
+] as const;
+export const SKILL_KEYS = ['foraging', 'crafting', 'firecraft'] as const;
+export const SKILL_START = 8; // small base so discovery can begin
+
+// Discovery: progress per experiment tick = curiosity·(0.3+skill/100)·RATE.
+// Discovery only happens when needs are met (SPEC: surplus -> progress).
+export const DISCOVERY_RATE = 0.9;
+export const SKILL_GAIN_PER_EXPERIMENT = 0.18; // per performing tick, in the domain
+export const SKILL_GAIN_PER_GATHER = 0.05; // foraging grows with practice
+export const EXPERIMENT_COMFORT = 45; // survival needs must be below this
+export const EXPERIMENT_MIN_HEALTH = 60;
+export const EXPERIMENT_APPEAL = 0.95; // scales curiosity into a comparable score
+
+// A lightning strike (fire's environmental trigger) can occur on a storm day.
+export const LIGHTNING_CHANCE_PER_STORM_DAY = 0.45;
+
+// Tech effects.
+export const STONE_TOOLS_GATHER_MULT = 1.5; // gather yield once known
+export const COOKING_HUNGER_MULT = 1.45; // cooked food is more filling

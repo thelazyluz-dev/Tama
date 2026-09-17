@@ -11,6 +11,7 @@ import {
   SEASON_LABEL,
   SEASON_EMOJI,
   WEATHER_LABEL,
+  TECH_LABEL,
   actionText,
   clockText,
   needColor,
@@ -99,6 +100,19 @@ export function StatusPanel(): JSX.Element {
         <span className="action-label">פעולה</span>
         <span className="action-value">{actionText(agent)}</span>
       </div>
+
+      {world.knowledge.known.length > 0 && (
+        <div className="tech-row">
+          <span className="tech-label">ידע</span>
+          <span className="tech-chips">
+            {world.knowledge.known.map((tech) => (
+              <span className="tech-chip" key={tech} title={TECH_LABEL[tech].name}>
+                {TECH_LABEL[tech].emoji} {TECH_LABEL[tech].name}
+              </span>
+            ))}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

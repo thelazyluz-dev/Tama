@@ -7,15 +7,19 @@
 //
 // This lives in src/sim: pure, no react/three/DOM.
 
-import type { WorldState, JournalKind, Season, Weather, NeedKey } from './types';
+import type { WorldState, JournalKind, Season, Weather, NeedKey, TechId } from './types';
 import { Rng } from './rng';
 
 export const MAX_JOURNAL = 200; // last 200 kept in memory (SPEC)
 
 function add(state: WorldState, kind: JournalKind, weight: 1 | 2 | 3, text: string): void {
   state.journal.push({ day: state.day, hour: state.hour, kind, weight, text });
-  if (state.journal.length > MAX_JOURNAL) {
-    state.journal.splice(0, state.journal.length - MAX_JOURNAL);
+  while (state.journal.length > MAX_JOURNAL) {
+    // Drop the oldest low-weight entry first so weight-3 milestones (births,
+    // deaths, discoveries, seasons) survive as a lasting chronicle.
+    let idx = state.journal.findIndex((e) => e.weight < 3);
+    if (idx === -1) idx = 0;
+    state.journal.splice(idx, 1);
   }
 }
 
@@ -138,6 +142,26 @@ const DEATH_PHRASE: Record<string, string> = {
   מחלה: 'המחלה גברה.',
   תשישות: 'הגוף פשוט כבה.',
 };
+
+const DISCOVERY_LINES: Record<TechId, string> = {
+  stone_tools: 'גילתה שאבן חדה חותכת ומפצחת. כלי האבן הראשון בעמק — הלקט מהיום קל יותר.',
+  fire: 'אחרי הברק, ניסתה שוב ושוב עד שניצוץ תפס. אש! חום ואור בידיים אנושיות, לראשונה.',
+  cooking: 'הניחה פרי על הגחלים, והריח שינה הכל. בישול — האוכל מעכשיו משביע הרבה יותר.',
+};
+
+/** A technology was discovered (weight 3 — the heart of the game's arc). */
+export function pushDiscovery(state: WorldState, tech: TechId): void {
+  add(state, 'discovery', 3, `${state.agent.name} — ${DISCOVERY_LINES[tech]}`);
+}
+
+/** The lightning strike that makes fire discoverable (weight 3). */
+export function pushLightning(state: WorldState, rng: Rng): void {
+  const lines = [
+    'ברק חבט בעץ סמוך והצית אותו. היא התבוננה בלהבות זמן רב, נדהמת.',
+    'ברק ירד על העמק ועץ עלה באש. משהו בה השתנה למראה החום הרוקד.',
+  ];
+  add(state, 'danger', 3, `${state.agent.name} — ${rng.pick(lines)}`);
+}
 
 /** Death entry (weight 3). */
 export function pushDeath(state: WorldState): void {

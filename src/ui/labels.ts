@@ -2,8 +2,14 @@
 // code comments in English). Gender-neutral phrasing for the live HUD; the
 // journal itself (src/sim/events.ts) uses the SPEC's feminine voice.
 
-import type { Agent, NeedKey, Season, Weather } from '../sim';
+import type { Agent, NeedKey, Season, Weather, TechId } from '../sim';
 import { TICKS_PER_HOUR } from '../sim';
+
+export const TECH_LABEL: Record<TechId, { emoji: string; name: string }> = {
+  stone_tools: { emoji: '🔪', name: 'כלי אבן' },
+  fire: { emoji: '🔥', name: 'אש' },
+  cooking: { emoji: '🍳', name: 'בישול' },
+};
 
 export const NEED_LABEL: Record<NeedKey, string> = {
   hunger: 'רעב',

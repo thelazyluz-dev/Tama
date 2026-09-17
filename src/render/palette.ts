@@ -13,6 +13,7 @@ export const ACTION_COLOR: Record<ActionId, string> = {
   warm: '#e07a3a', // ember orange
   buildShelter: '#a9764e', // timber brown
   makeFire: '#e0562f', // fire red
+  experiment: '#c48ae0', // insight violet
 };
 
 /** Resource node colors (SPEC: blue = water, green = fruit). */
@@ -33,4 +34,5 @@ export const ACTION_BUBBLE: Record<ActionId, { emoji: string; label: string }> =
   warm: { emoji: '🔥', label: 'מתחממת' },
   buildShelter: { emoji: '🛠️', label: 'בונה מחסה' },
   makeFire: { emoji: '🔥', label: 'מדליקה אש' },
+  experiment: { emoji: '💡', label: 'מתנסה' },
 };

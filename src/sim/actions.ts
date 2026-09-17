@@ -10,6 +10,15 @@ import type { Agent, WorldState, ActionId, NeedKey, Vec2, Structure } from './ty
 import { nearestResource } from './resources';
 import { nearestStructure, hasShelter, anyLitFire } from './structures';
 import { efficiency } from './needs';
+import {
+  fireKnown,
+  gatherMultiplier,
+  hungerReliefMultiplier,
+  hasDiscoverable,
+  comfortableForResearch,
+  attemptDiscovery,
+} from './knowledge';
+import { pushDiscovery } from './events';
 import { Rng } from './rng';
 import {
   ACTION,
@@ -33,6 +42,7 @@ import {
   FIRE_FUEL_START,
   FIRE_FUEL_PER_MAKE,
   FIRE_RADIUS,
+  EXPERIMENT_APPEAL,
 } from './balance';
 
 export interface ResolvedTarget {
@@ -88,7 +98,7 @@ const eat: ActionDef = {
     if (a.foodStock <= 0) return;
     const perTick = Math.min(EAT_FROM_STOCK / ACTION.eat.durationTicks, a.foodStock);
     a.foodStock -= perTick;
-    a.needs.hunger -= perTick * HUNGER_PER_FOOD;
+    a.needs.hunger -= perTick * HUNGER_PER_FOOD * hungerReliefMultiplier(state);
   },
 };
 
@@ -131,7 +141,7 @@ const wash: ActionDef = {
 const warm: ActionDef = {
   id: 'warm',
   appeal: (a) => sq(a.needs.warmth / 100),
-  feasibility: (_a, w) => (anyLitFire(w) ? 1 : 0),
+  feasibility: (_a, w) => (fireKnown(w) && anyLitFire(w) ? 1 : 0),
   scoringTarget: (a, w) => nearestStructure(w.structures, 'fire', a.position)?.position ?? a.position,
   commitTarget: (a, w) => {
     const fire = nearestStructure(w.structures, 'fire', a.position);
@@ -182,7 +192,7 @@ const gather: ActionDef = {
     const node = state.resources.find((r) => r.id === action.targetId);
     if (!node || node.quantity <= 0) return;
     const room = FOOD_STOCK_CAP - a.foodStock;
-    const amount = Math.min(GATHER_RATE * efficiency(state), node.quantity, room);
+    const amount = Math.min(GATHER_RATE * efficiency(state) * gatherMultiplier(state), node.quantity, room);
     if (amount <= 0) return;
     node.quantity -= amount;
     a.foodStock += amount;
@@ -221,7 +231,7 @@ const makeFire: ActionDef = {
     const cold = 0.4 + sq(a.needs.warmth / 100);
     return MAKE_FIRE_APPEAL * prepBonus(w) * cold * supplied;
   },
-  feasibility: () => 1,
+  feasibility: (_a, w) => (fireKnown(w) ? 1 : 0),
   scoringTarget: (a) => a.position,
   commitTarget: (_a, w) => ({ pos: campSpot(w) }),
   durationTicks: ACTION.makeFire.durationTicks,
@@ -244,6 +254,25 @@ const makeFire: ActionDef = {
   },
 };
 
+// Experiment / התנסות — the discovery action. Only appealing when the agent is
+// comfortable and there is something to discover (SPEC: surplus -> progress).
+const experiment: ActionDef = {
+  id: 'experiment',
+  appeal: (a, w) => {
+    if (isReactive(w) || !hasDiscoverable(w)) return 0;
+    const met = comfortableForResearch(w) ? 1 : 0.1;
+    return a.traits.curiosity * met * EXPERIMENT_APPEAL;
+  },
+  feasibility: (_a, w) => (hasDiscoverable(w) ? 1 : 0),
+  scoringTarget: (a) => a.position,
+  commitTarget: (a) => ({ pos: { ...a.position } }),
+  durationTicks: ACTION.experiment.durationTicks,
+  effect: ACTION.experiment.effect,
+  performTick: (state) => {
+    for (const tech of attemptDiscovery(state)) pushDiscovery(state, tech);
+  },
+};
+
 export const ACTIONS: Record<ActionId, ActionDef> = {
   eat,
   drink,
@@ -254,6 +283,7 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
   warm,
   buildShelter,
   makeFire,
+  experiment,
 };
 export const ACTION_LIST: readonly ActionDef[] = [
   eat,
@@ -264,5 +294,6 @@ export const ACTION_LIST: readonly ActionDef[] = [
   gather,
   buildShelter,
   makeFire,
+  experiment,
   wander,
 ];

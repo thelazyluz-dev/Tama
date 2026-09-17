@@ -14,7 +14,7 @@ export type NeedKey =
   | 'boredom'
   | 'safety';
 
-/** Stage-1 actions. */
+/** Stage-1/2 actions ('experiment' is the stage-2 discovery action). */
 export type ActionId =
   | 'eat'
   | 'drink'
@@ -24,7 +24,36 @@ export type ActionId =
   | 'wash'
   | 'warm'
   | 'buildShelter'
-  | 'makeFire';
+  | 'makeFire'
+  | 'experiment';
+
+// --- Stage 2: knowledge ---------------------------------------------------
+/** Heritable personality traits, 0..1 (heritability itself arrives in stage 4). */
+export type TraitKey =
+  | 'curiosity'
+  | 'diligence'
+  | 'sociability'
+  | 'courage'
+  | 'temper'
+  | 'constitution';
+
+/** Personal, per-life skills, 0..100 (reset each generation in later stages). */
+export type SkillKey = 'foraging' | 'crafting' | 'firecraft';
+
+/** Technologies for the first two eras. */
+export type TechId = 'stone_tools' | 'fire' | 'cooking';
+
+/** Environmental triggers the agent has witnessed (gate certain discoveries). */
+export interface KnowledgeTriggers {
+  lightning: boolean; // enables discovering fire (SPEC: fire after a lightning storm)
+}
+
+/** Tribe-level knowledge (persists across generations in later stages). */
+export interface KnowledgeState {
+  known: TechId[];
+  progress: Record<string, number>; // techId -> accumulated research
+  triggers: KnowledgeTriggers;
+}
 
 export type ResourceType = 'water' | 'fruit';
 export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
@@ -106,6 +135,8 @@ export interface Agent {
   deathCause?: string;
   /** Stored food the agent lives off (SPEC character economy). */
   foodStock: number;
+  traits: Record<TraitKey, number>;
+  skills: Record<SkillKey, number>;
   position: Vec2;
   currentAction: ActiveAction | null;
 }
@@ -136,6 +167,7 @@ export interface WorldState {
   structures: Structure[];
   journal: JournalEntry[];
   milestones: Milestones;
+  knowledge: KnowledgeState;
 
   // Derived-from-seed, rebuilt on load.
   terrain: TerrainData;
@@ -157,4 +189,5 @@ export interface SavedWorld {
   resources: ResourceNode[];
   journal: JournalEntry[];
   milestones: Milestones;
+  knowledge: KnowledgeState;
 }
