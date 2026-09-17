@@ -7,18 +7,33 @@
 
 import type { SavedWorld } from '../sim';
 
-const STORAGE_KEY = 'survival-sim:save:v0';
+// Bump this whenever the SavedWorld shape changes so older, incompatible saves
+// are ignored (a fresh valley) instead of crashing hydrate(). The key includes
+// the version so stale data under an old key is never read.
+const SAVE_VERSION = 3;
+const STORAGE_KEY = `survival-sim:save:v${SAVE_VERSION}`;
 
 export interface SaveRecord {
-  version: 0;
+  version: number;
   /** Real wall-clock time (ms) at the moment of saving. */
   savedAtMs: number;
   world: SavedWorld;
 }
 
+/** Sanity-check that a parsed record has the fields the current sim expects. */
+function isValid(rec: SaveRecord | null): rec is SaveRecord {
+  if (!rec || rec.version !== SAVE_VERSION) return false;
+  const w = rec.world;
+  if (!w || typeof w.seed !== 'number' || !w.agent) return false;
+  // Fields added across stages — their absence means an older shape.
+  if (!w.knowledge || !w.agent.traits || !w.agent.skills) return false;
+  if (!Array.isArray(w.structures) || !Array.isArray(w.resources)) return false;
+  return true;
+}
+
 /** Persist the world. Silently no-ops if storage is unavailable. */
 export function saveGame(world: SavedWorld, now: number): void {
-  const record: SaveRecord = { version: 0, savedAtMs: now, world };
+  const record: SaveRecord = { version: SAVE_VERSION, savedAtMs: now, world };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(record));
   } catch {
@@ -26,7 +41,7 @@ export function saveGame(world: SavedWorld, now: number): void {
   }
 }
 
-/** Load the save record, or null if none / unreadable / wrong version. */
+/** Load the save record, or null if none / unreadable / wrong version / shape. */
 export function loadGame(): SaveRecord | null {
   let raw: string | null = null;
   try {
@@ -38,8 +53,7 @@ export function loadGame(): SaveRecord | null {
 
   try {
     const parsed = JSON.parse(raw) as SaveRecord;
-    if (parsed.version !== 0 || !parsed.world) return null;
-    return parsed;
+    return isValid(parsed) ? parsed : null;
   } catch {
     return null;
   }
@@ -49,6 +63,8 @@ export function loadGame(): SaveRecord | null {
 export function clearGame(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
+    // Also clear any older-versioned saves so they never accumulate.
+    for (let v = 0; v < SAVE_VERSION; v++) localStorage.removeItem(`survival-sim:save:v${v}`);
   } catch {
     // ignore
   }

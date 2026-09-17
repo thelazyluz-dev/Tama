@@ -41,16 +41,27 @@ interface Boot {
   catchUp: CatchUpSummary | null;
 }
 
+function freshGame(now: number): Boot {
+  // Derive a seed from the wall clock (low 32 bits).
+  const seed = ((now >>> 0) ^ 0x5f3759df) >>> 0;
+  const world = createWorld(seed);
+  saveGame(toSaved(world), now);
+  return { world, phase: 'playing', catchUp: null };
+}
+
 /** Load a save (and fast-forward offline time) or start a fresh valley. */
 function bootstrap(): Boot {
   const now = Date.now();
-  const record = loadGame();
 
-  if (record) {
+  // A malformed or incompatible save must never blank the app — fall back to a
+  // fresh valley instead of throwing at module load.
+  try {
+    const record = loadGame();
+    if (!record) return freshGame(now);
+
     const base = hydrate(record.world);
     const result = catchUp(base, Math.max(0, now - record.savedAtMs));
-    // Re-anchor the save to now so a subsequent reload measures from here.
-    saveGame(toSaved(result.state), now);
+    saveGame(toSaved(result.state), now); // re-anchor to now
 
     const summary: CatchUpSummary | null =
       result.simulatedTicks > 0
@@ -58,13 +69,14 @@ function bootstrap(): Boot {
         : null;
 
     return { world: result.state, phase: summary ? 'return' : 'playing', catchUp: summary };
+  } catch {
+    try {
+      clearGame();
+    } catch {
+      // ignore
+    }
+    return freshGame(now);
   }
-
-  // Fresh game: derive a seed from the wall clock (low 32 bits).
-  const seed = ((now >>> 0) ^ 0x5f3759df) >>> 0;
-  const world = createWorld(seed);
-  saveGame(toSaved(world), now);
-  return { world, phase: 'playing', catchUp: null };
 }
 
 const boot = bootstrap();
