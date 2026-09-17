@@ -9,6 +9,10 @@ export const TECH_LABEL: Record<TechId, { emoji: string; name: string }> = {
   stone_tools: { emoji: '🔪', name: 'כלי אבן' },
   fire: { emoji: '🔥', name: 'אש' },
   cooking: { emoji: '🍳', name: 'בישול' },
+  pottery: { emoji: '🏺', name: 'קדרות' },
+  spear: { emoji: '🏹', name: 'ציד' },
+  agriculture: { emoji: '🌾', name: 'חקלאות' },
+  schooling: { emoji: '📚', name: 'בית ספר' },
 };
 
 /** Stage 5: the four priority sliders (SPEC "עדיפויות"). */

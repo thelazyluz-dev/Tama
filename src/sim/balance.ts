@@ -261,6 +261,23 @@ export const STONE_TOOLS_GATHER_MULT = 1.5; // gather yield once known
 export const COOKING_HUNGER_MULT = 1.45; // cooked food is more filling
 
 // ---------------------------------------------------------------------------
+// Later eras (SPEC "עידנים" — settlement & community). Each new technology has
+// a concrete effect on the food economy or on knowledge transfer, and its own
+// discovery line in the journal. All tribe-level knowledge, like fire/cooking —
+// no new meshes, so still art-free until stage 6.
+// ---------------------------------------------------------------------------
+// Pottery: better storage — a bigger winter larder.
+export const POTTERY_CAP_MULT = 1.6; // FOOD_STOCK_CAP multiplier once known
+// Agriculture: the fields yield on their own, outside winter (settlement era).
+export const AGRICULTURE_FOOD_PER_DAY = 14;
+// Spear/hunting: game to hunt through the winter — the season's first food source.
+export const HUNTING_FOOD_PER_DAY = 10;
+// Schooling ("בית ספר"): the turning point — the next generation starts with
+// real skills, not from zero, and learns faster at a parent's side.
+export const SCHOOL_TEACH_MULT = 2.6; // multiplies SKILL_TEACH_PER_TICK
+export const SCHOOL_START_SKILL = 26; // a newborn's baseline skill once schooling exists
+
+// ---------------------------------------------------------------------------
 // Stage 3 — the second (nomad, relationships, courtship)
 // ---------------------------------------------------------------------------
 // A nomad of the opposite sex passes through once the founder has survived and

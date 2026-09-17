@@ -31,6 +31,13 @@ import {
   inheritTraits,
 } from './genetics';
 import { ACTIONS } from './actions';
+import {
+  foodCap,
+  agricultureKnown,
+  huntingKnown,
+  teachMultiplier,
+  schoolingKnown,
+} from './knowledge';
 import { decide } from './utility';
 import {
   pushSeason,
@@ -65,6 +72,9 @@ import {
   SKILL_TEACH_PER_TICK,
   TEACHING_AGE_MIN,
   NOMAD_COOLDOWN_DAYS,
+  AGRICULTURE_FOOD_PER_DAY,
+  HUNTING_FOOD_PER_DAY,
+  SCHOOL_START_SKILL,
   TICKS_PER_DAY,
   TICKS_PER_HOUR,
   MOVE_SPEED,
@@ -227,6 +237,7 @@ function tickOnce(state: WorldState, rng: Rng): void {
     }
 
     regrowResources(state.resources, state.season);
+    addProvisions(state);
     state.milestones.survivedWinters = wintersElapsed(state.day);
     ageAndReproduce(state, rng);
     maybeSpawnMate(state);
@@ -319,7 +330,8 @@ function awardPoints(state: WorldState, before: PointSnapshot, newDay: boolean):
   state.playerPoints += earned;
 }
 
-/** A child in the teaching window near a living parent picks up skills. */
+/** A child in the teaching window near a living parent picks up skills. A
+ *  school (schooling tech) multiplies how fast the knowledge transfers. */
 function teachChild(state: WorldState, child: Agent): void {
   if (!inTeachingWindow(child, state.day) || !child.parents) return;
   const parentAlive = child.parents.some((pid) => {
@@ -327,9 +339,19 @@ function teachChild(state: WorldState, child: Agent): void {
     return p?.alive;
   });
   if (!parentAlive) return;
+  const gain = SKILL_TEACH_PER_TICK * teachMultiplier(state);
   for (const key of ['foraging', 'crafting', 'firecraft'] as const) {
-    child.skills[key] = Math.min(100, child.skills[key] + SKILL_TEACH_PER_TICK);
+    child.skills[key] = Math.min(100, child.skills[key] + gain);
   }
+}
+
+/** Passive tribe provisions per day (SPEC later eras): farms feed the tribe
+ *  outside winter, hunting feeds it through winter. Capped by the larder. */
+function addProvisions(state: WorldState): void {
+  let food = 0;
+  if (agricultureKnown(state) && state.season !== 'winter') food += AGRICULTURE_FOOD_PER_DAY;
+  if (huntingKnown(state) && state.season === 'winter') food += HUNTING_FOOD_PER_DAY;
+  if (food > 0) state.foodStock = Math.min(foodCap(state), state.foodStock + food);
 }
 
 /** If the watched agent has died, the camera passes to an heir. */
@@ -463,6 +485,12 @@ function giveBirth(state: WorldState, mother: Agent, rng: Rng): void {
   });
   child.traits = inheritTraits(mother, father, rng); // inherited, not random
   child.parents = [mother.id, father.id];
+  // A school means the next generation starts with real skills, not from zero.
+  if (schoolingKnown(state)) {
+    for (const key of ['foraging', 'crafting', 'firecraft'] as const) {
+      child.skills[key] = Math.max(child.skills[key], SCHOOL_START_SKILL);
+    }
+  }
   const day = state.day;
   child.relations[mother.id] = { affection: 60, trust: 60, kind: 'parent', lastInteractionDay: day };
   child.relations[father.id] = { affection: 60, trust: 60, kind: 'parent', lastInteractionDay: day };

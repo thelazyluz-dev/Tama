@@ -41,8 +41,15 @@ export type TraitKey =
 /** Personal, per-life skills, 0..100 (reset each generation in later stages). */
 export type SkillKey = 'foraging' | 'crafting' | 'firecraft';
 
-/** Technologies for the first two eras. */
-export type TechId = 'stone_tools' | 'fire' | 'cooking';
+/** Technologies across the eras (SPEC "עידנים" table: לקט → קהילה). */
+export type TechId =
+  | 'stone_tools'
+  | 'fire'
+  | 'cooking'
+  | 'pottery'
+  | 'spear'
+  | 'agriculture'
+  | 'schooling';
 
 /** Environmental triggers the agent has witnessed (gate certain discoveries). */
 export interface KnowledgeTriggers {

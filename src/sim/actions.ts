@@ -20,6 +20,7 @@ import {
   hasDiscoverable,
   comfortableForResearch,
   attemptDiscovery,
+  foodCap,
 } from './knowledge';
 import { pushDiscovery } from './events';
 import { Rng } from './rng';
@@ -33,7 +34,6 @@ import {
   NIGHT_END_HOUR,
   WORLD_HALF,
   RESOURCE_MARGIN,
-  FOOD_STOCK_CAP,
   EAT_FROM_STOCK,
   HUNGER_PER_FOOD,
   GATHER_RATE,
@@ -174,7 +174,7 @@ const gather: ActionDef = {
   appeal: (a, w) => {
     if (w.season === 'winter') return 0;
     const seasonMult = w.season === 'autumn' ? GATHER_AUTUMN_BONUS : 1;
-    const proactive = isReactive(w) ? 0 : GATHER_STOCK_APPEAL * (1 - w.foodStock / FOOD_STOCK_CAP);
+    const proactive = isReactive(w) ? 0 : GATHER_STOCK_APPEAL * (1 - w.foodStock / foodCap(w));
     const reactive = w.foodStock < EAT_FROM_STOCK ? sq(a.needs.hunger / 100) * 1.2 : 0;
     return proactive * seasonMult + reactive;
   },
@@ -195,7 +195,7 @@ const gather: ActionDef = {
     if (!action?.targetId) return;
     const node = state.resources.find((r) => r.id === action.targetId);
     if (!node || node.quantity <= 0) return;
-    const room = FOOD_STOCK_CAP - state.foodStock;
+    const room = foodCap(state) - state.foodStock;
     const amount = Math.min(GATHER_RATE * efficiency(agent) * gatherMultiplier(state), node.quantity, room);
     if (amount <= 0) return;
     node.quantity -= amount;

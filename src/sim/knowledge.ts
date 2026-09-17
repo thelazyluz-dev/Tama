@@ -12,6 +12,9 @@ import {
   EXPERIMENT_MIN_HEALTH,
   STONE_TOOLS_GATHER_MULT,
   COOKING_HUNGER_MULT,
+  FOOD_STOCK_CAP,
+  POTTERY_CAP_MULT,
+  SCHOOL_TEACH_MULT,
 } from './balance';
 
 export interface Tech {
@@ -27,9 +30,21 @@ export const TECHS: Record<TechId, Tech> = {
   stone_tools: { id: 'stone_tools', name: 'כלי אבן', domain: 'crafting', cost: 30, prereqs: [] },
   fire: { id: 'fire', name: 'אש', domain: 'firecraft', cost: 62, prereqs: [], trigger: 'lightning' },
   cooking: { id: 'cooking', name: 'בישול', domain: 'firecraft', cost: 46, prereqs: ['fire'] },
+  pottery: { id: 'pottery', name: 'קדרות', domain: 'crafting', cost: 40, prereqs: ['stone_tools'] },
+  spear: { id: 'spear', name: 'ציד', domain: 'crafting', cost: 58, prereqs: ['stone_tools', 'fire'] },
+  agriculture: { id: 'agriculture', name: 'חקלאות', domain: 'foraging', cost: 82, prereqs: ['pottery'] },
+  schooling: { id: 'schooling', name: 'בית ספר', domain: 'crafting', cost: 100, prereqs: ['cooking', 'agriculture'] },
 };
 
-export const TECH_LIST: readonly Tech[] = [TECHS.stone_tools, TECHS.fire, TECHS.cooking];
+export const TECH_LIST: readonly Tech[] = [
+  TECHS.stone_tools,
+  TECHS.fire,
+  TECHS.cooking,
+  TECHS.pottery,
+  TECHS.spear,
+  TECHS.agriculture,
+  TECHS.schooling,
+];
 
 export function isKnown(k: KnowledgeState, id: TechId): boolean {
   return k.known.includes(id);
@@ -47,6 +62,27 @@ export function gatherMultiplier(state: WorldState): number {
 /** Hunger-relief multiplier from cooking (cooked food is more filling). */
 export function hungerReliefMultiplier(state: WorldState): number {
   return isKnown(state.knowledge, 'cooking') ? COOKING_HUNGER_MULT : 1;
+}
+
+/** Food-store capacity, raised by pottery (a bigger winter larder). */
+export function foodCap(state: WorldState): number {
+  return isKnown(state.knowledge, 'pottery') ? FOOD_STOCK_CAP * POTTERY_CAP_MULT : FOOD_STOCK_CAP;
+}
+
+/** Passive tribe provisions per day from farming (non-winter) and hunting (winter). */
+export function agricultureKnown(state: WorldState): boolean {
+  return isKnown(state.knowledge, 'agriculture');
+}
+export function huntingKnown(state: WorldState): boolean {
+  return isKnown(state.knowledge, 'spear');
+}
+
+/** Knowledge-transfer multiplier from a school (SPEC turning point). */
+export function teachMultiplier(state: WorldState): number {
+  return isKnown(state.knowledge, 'schooling') ? SCHOOL_TEACH_MULT : 1;
+}
+export function schoolingKnown(state: WorldState): boolean {
+  return isKnown(state.knowledge, 'schooling');
 }
 
 /** Techs discoverable right now: unknown, prereqs met, trigger witnessed. */

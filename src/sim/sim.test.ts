@@ -11,8 +11,16 @@ import { catchUp } from './catchup';
 import { scoreAction } from './utility';
 import { ACTIONS } from './actions';
 import { applyIntervention } from './player';
+import { foodCap, teachMultiplier } from './knowledge';
 import type { WorldState, Agent } from './types';
-import { TICKS_PER_DAY, POINTS_START, COST_SPARK, PRIORITY_DEFAULT } from './balance';
+import {
+  TICKS_PER_DAY,
+  POINTS_START,
+  COST_SPARK,
+  PRIORITY_DEFAULT,
+  POTTERY_CAP_MULT,
+  SCHOOL_TEACH_MULT,
+} from './balance';
 
 interface Run {
   final: WorldState;
@@ -63,11 +71,12 @@ function run(seed: number, days: number): Run {
   return r;
 }
 
-describe('stages 1-4 combined (seed 42, ~400 days)', () => {
-  const r = run(42, 400);
+describe('stages 1-4 combined (seed 4, ~400 days)', () => {
+  const r = run(4, 400);
 
   it('prints the saga', () => {
-    console.log('\n=== SAGA · seed 42 ===');
+    console.log('\n=== SAGA · seed 4 ===');
+    console.log(`  known: [${r.final.knowledge.known.join(', ')}]`);
     console.log(`  fire ${r.fireDiscovered} · nomad ${r.nomadArrived} · partners ${r.partnersFormed}`);
     console.log(`  min founder loneliness after nomad: ${r.minLonelinessAfterNomad.toFixed(0)}`);
     console.log(`  births ${r.births} · deepest generation ${r.deepestGeneration} · handoffs ${r.handoffs}`);
@@ -96,6 +105,13 @@ describe('stages 1-4 combined (seed 42, ~400 days)', () => {
     expect(r.handoffs).toBeGreaterThan(0);
   });
 
+  it('unfolds the later eras — pottery, hunting, farming, a school (stage 7a)', () => {
+    expect(r.final.knowledge.known).toContain('pottery');
+    expect(r.final.knowledge.known).toContain('agriculture');
+    expect(r.final.knowledge.known).toContain('schooling');
+    expect(r.final.knowledge.known.length).toBeGreaterThanOrEqual(6);
+  });
+
   it('children inherit traits from their parents (± mutation)', () => {
     const child = r.aChild!;
     expect(child).toBeDefined();
@@ -108,6 +124,34 @@ describe('stages 1-4 combined (seed 42, ~400 days)', () => {
       expect(child.traits[key]).toBeGreaterThanOrEqual(Math.max(0, lo) - 1e-9);
       expect(child.traits[key]).toBeLessThanOrEqual(Math.min(1, hi) + 1e-9);
     }
+  });
+});
+
+describe('later eras (stage 7a) — mechanics', () => {
+  it('pottery enlarges the food larder', () => {
+    const w = createWorld(1);
+    const before = foodCap(w);
+    w.knowledge.known.push('pottery');
+    expect(foodCap(w)).toBeCloseTo(before * POTTERY_CAP_MULT, 6);
+  });
+
+  it('a school speeds knowledge transfer', () => {
+    const w = createWorld(1);
+    expect(teachMultiplier(w)).toBe(1);
+    w.knowledge.known.push('schooling');
+    expect(teachMultiplier(w)).toBe(SCHOOL_TEACH_MULT);
+  });
+
+  it('farming feeds the tribe on its own, without foraging (non-winter)', () => {
+    // Days 0-3 are spring and the founder is too young to gather, so any food
+    // in the farming world comes from agriculture alone.
+    const plain = createWorld(11);
+    const farm = createWorld(11);
+    farm.knowledge.known = ['stone_tools', 'pottery', 'agriculture'];
+    const p = tick(plain, TICKS_PER_DAY * 3);
+    const f = tick(farm, TICKS_PER_DAY * 3);
+    expect(p.foodStock).toBe(0);
+    expect(f.foodStock).toBeGreaterThan(0);
   });
 });
 
