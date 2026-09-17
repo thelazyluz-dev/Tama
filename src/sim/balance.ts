@@ -2,7 +2,7 @@
 // code (CLAUDE.md rule). When you change a number here, run `npm run test:sim`
 // and compare the printed before/after stats.
 
-import type { NeedKey, Season, Weather } from './types';
+import type { ActionId, NeedKey, PriorityCategory, Season, Weather } from './types';
 
 // ---------------------------------------------------------------------------
 // Time
@@ -307,3 +307,53 @@ export const MAX_AGE_DAYS = 64; // near-certain death by here
 // A wandering nomad arrives when a lone unpartnered adult has no eligible mate
 // in the tribe, no more than once per this many days (keeps lineages going).
 export const NOMAD_COOLDOWN_DAYS = 12;
+
+// ---------------------------------------------------------------------------
+// Stage 5 — the player (SPEC "מנגנון ההשפעה של השחקן"). Three indirect channels
+// only: priority sliders (a playerMod on appeal), a point economy, and a small
+// shop of interventions. The character stays autonomous — the player nudges.
+// ---------------------------------------------------------------------------
+// Priority sliders multiply the appeal of every action in a category. Capped at
+// ×2 so it never becomes direct control (SPEC), floored at ×0.5 so the player
+// can de-emphasise without switching a whole category off.
+export const PRIORITY_MIN = 0.5;
+export const PRIORITY_MAX = 2;
+export const PRIORITY_DEFAULT = 1;
+
+// Which priority category each action answers to (the four SPEC sliders).
+export const ACTION_CATEGORY: Record<ActionId, PriorityCategory> = {
+  eat: 'survival',
+  drink: 'survival',
+  sleep: 'survival',
+  wash: 'survival',
+  warm: 'survival',
+  wander: 'survival',
+  gather: 'survival',
+  buildShelter: 'building',
+  makeFire: 'building',
+  experiment: 'research',
+  socialize: 'social',
+};
+
+// A decision node: when the top two actions score within this fraction of each
+// other the character is genuinely torn (SPEC channel 3 — shown, not forced).
+export const DECISION_NODE_GAP = 0.1;
+
+// Point economy (SPEC "כלכלת הניקוד"). Points are the PLAYER's, cross
+// generations, and are earned by showing up + achievements. THE RULE: points
+// never buy food — only opportunities. A small starting purse to try the shop.
+export const POINTS_START = 4;
+export const POINTS_PER_DAY = 1; // daily presence (kept small — no idle reward)
+export const POINTS_DISCOVERY = 20; // a first technology
+export const POINTS_GENERATION = 30; // a new generation is reached
+export const POINTS_WINTER = 15; // survived another winter
+export const POINTS_STRUCTURE = 10; // shelter / fire (first of each)
+export const POINTS_PARTNERSHIP = 12; // a couple formed
+
+// The shop — each item buys an OPPORTUNITY, never bread (SPEC hard rule).
+export const COST_SPARK = 8; // enables discovering fire (skips waiting for a storm)
+export const COST_INSPIRATION = 12; // a burst of research toward the next tech
+export const COST_NEWCOMER = 22; // summon a wanderer so a lone lineage can continue
+export const COST_MEDICINE = 16; // rescue the agent in crisis (the one direct save)
+export const INSPIRATION_PROGRESS = 30; // research points granted by inspiration
+export const MEDICINE_HEAL = 55; // health restored by a rescue

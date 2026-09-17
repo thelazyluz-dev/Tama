@@ -10,7 +10,7 @@ import type { SavedWorld } from '../sim';
 // Bump this whenever the SavedWorld shape changes so older, incompatible saves
 // are ignored (a fresh valley) instead of crashing hydrate(). The key includes
 // the version so stale data under an old key is never read.
-const SAVE_VERSION = 3;
+const SAVE_VERSION = 4;
 const STORAGE_KEY = `survival-sim:save:v${SAVE_VERSION}`;
 
 export interface SaveRecord {
@@ -30,6 +30,8 @@ function isValid(rec: SaveRecord | null): rec is SaveRecord {
   // Fields added across stages — their absence means an older shape.
   if (!w.knowledge || !a0.traits || !a0.skills || !a0.relations) return false;
   if (!Array.isArray(w.structures) || !Array.isArray(w.resources)) return false;
+  // Stage 5: the player economy must be present and well-formed.
+  if (!w.playerPriorities || typeof w.playerPoints !== 'number') return false;
   return true;
 }
 

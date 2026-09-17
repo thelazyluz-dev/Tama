@@ -9,6 +9,8 @@ import {
   JournalPanel,
   DeathScreen,
   FamilyPanel,
+  PlayerPanel,
+  CrisisAlert,
 } from './ui';
 import { useGameLoop, useGameStore } from './store';
 
@@ -23,6 +25,8 @@ export function App(): JSX.Element {
         <StatusPanel />
         <JournalPanel />
         <FamilyPanel />
+        <PlayerPanel />
+        <CrisisAlert />
         <SpeedControls />
       </div>
       {phase === 'return' && <ReturnScreen />}

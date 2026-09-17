@@ -11,6 +11,7 @@ import type {
   ResourceNode,
   Relation,
   AiProfile,
+  PriorityCategory,
   Sex,
 } from './types';
 import { Rng, deriveSeed } from './rng';
@@ -69,6 +70,14 @@ import {
   MOVE_SPEED,
   ARRIVE_RADIUS,
   WORLD_HALF,
+  PRIORITY_DEFAULT,
+  POINTS_START,
+  POINTS_PER_DAY,
+  POINTS_DISCOVERY,
+  POINTS_GENERATION,
+  POINTS_WINTER,
+  POINTS_STRUCTURE,
+  POINTS_PARTNERSHIP,
 } from './balance';
 
 const FEMALE_NAMES = ['נועה', 'מאיה', 'תמר', 'שירה', 'יעל', 'רוני', 'דנה', 'הדס', 'אביגיל', 'ליבי'] as const;
@@ -109,6 +118,15 @@ function spawnAgent(o: SpawnOpts): Agent {
   };
 }
 
+function defaultPriorities(): Record<PriorityCategory, number> {
+  return {
+    survival: PRIORITY_DEFAULT,
+    social: PRIORITY_DEFAULT,
+    research: PRIORITY_DEFAULT,
+    building: PRIORITY_DEFAULT,
+  };
+}
+
 /** Build a fresh world from a seed. Deterministic. The founder is female. */
 export function createWorld(seed: number, aiProfile: AiProfile = 'sensible'): WorldState {
   const nameRng = new Rng(deriveSeed(seed, 'name'));
@@ -139,6 +157,8 @@ export function createWorld(seed: number, aiProfile: AiProfile = 'sensible'): Wo
     playerAgentId: founder.id,
     nextAgentId: 1,
     foodStock: 0,
+    playerPriorities: defaultPriorities(),
+    playerPoints: POINTS_START,
     structures: [],
     journal: [],
     milestones: {
@@ -182,6 +202,7 @@ function tickOnce(state: WorldState, rng: Rng): void {
   // Once everyone is dead the world stops (heirs arrive in stage 4).
   if (!state.agents.some((a) => a.alive)) return;
 
+  const points = pointSnapshot(state); // stage 5: what the player earns this tick
   const voice = playerAgent(state); // whose name carries world-level journal lines
 
   // 2. Daily bookkeeping: season, weather, regrowth, nomad, summary.
@@ -208,7 +229,7 @@ function tickOnce(state: WorldState, rng: Rng): void {
     regrowResources(state.resources, state.season);
     state.milestones.survivedWinters = wintersElapsed(state.day);
     ageAndReproduce(state, rng);
-    maybeSpawnMate(state, rng);
+    maybeSpawnMate(state);
     decayRelationships(state);
     pushDaySummary(state, voice, rng);
   }
@@ -255,6 +276,47 @@ function tickOnce(state: WorldState, rng: Rng): void {
   // 5. Relationships may tip into partnership; the watched life may pass on.
   promoteRelationships(state);
   handleControlHandoff(state);
+
+  // 6. Stage 5: the player banks points for presence and achievements.
+  awardPoints(state, points, newDay);
+}
+
+interface PointSnapshot {
+  known: number;
+  generations: number;
+  winters: number;
+  builtShelter: boolean;
+  madeFire: boolean;
+  becamePartners: boolean;
+}
+
+function pointSnapshot(state: WorldState): PointSnapshot {
+  return {
+    known: state.knowledge.known.length,
+    generations: state.milestones.generations,
+    winters: state.milestones.survivedWinters,
+    builtShelter: state.milestones.builtShelter,
+    madeFire: state.milestones.madeFire,
+    becamePartners: state.milestones.becamePartners,
+  };
+}
+
+/**
+ * Points earned during a tick (SPEC "איך משיגים ניקוד"): a little for daily
+ * presence, more for achievements — first tech, a new generation, a survived
+ * winter, first shelter/fire, a partnership. Computed by diffing a snapshot so
+ * the award fires exactly once per event, wherever in the tick it happened.
+ */
+function awardPoints(state: WorldState, before: PointSnapshot, newDay: boolean): void {
+  let earned = 0;
+  if (newDay) earned += POINTS_PER_DAY;
+  earned += Math.max(0, state.knowledge.known.length - before.known) * POINTS_DISCOVERY;
+  earned += Math.max(0, state.milestones.generations - before.generations) * POINTS_GENERATION;
+  earned += Math.max(0, state.milestones.survivedWinters - before.winters) * POINTS_WINTER;
+  if (state.milestones.builtShelter && !before.builtShelter) earned += POINTS_STRUCTURE;
+  if (state.milestones.madeFire && !before.madeFire) earned += POINTS_STRUCTURE;
+  if (state.milestones.becamePartners && !before.becamePartners) earned += POINTS_PARTNERSHIP;
+  state.playerPoints += earned;
 }
 
 /** A child in the teaching window near a living parent picks up skills. */
@@ -433,32 +495,30 @@ function mournOrphans(state: WorldState, dead: Agent): void {
 }
 
 /**
- * A wandering mate arrives when a lone fertile adult has no eligible (non-kin,
- * opposite-sex) partner in the tribe. Generalises the SPEC nomad across
- * generations so lineages can continue.
+ * A lone fertile adult with no eligible (non-kin, opposite-sex) partner in the
+ * tribe, or null when someone still has a viable match. Shared by the natural
+ * nomad event and the player's "summon a newcomer" intervention.
  */
-function maybeSpawnMate(state: WorldState, _rng: Rng): void {
+export function newcomerCandidate(state: WorldState): Agent | null {
   const singles = state.agents.filter(
     (a) => a.alive && isFertile(a, state.day) && !partnerOf(state, a),
   );
-  if (singles.length === 0) return;
-
+  if (singles.length === 0) return null;
   const viable = singles.some((a) =>
     singles.some((b) => a !== b && a.sex !== b.sex && !areKin(a, b)),
   );
-  if (viable) return;
+  return viable ? null : singles[0]!;
+}
 
-  if (state.day < NOMAD_MIN_DAY || !state.milestones.builtShelter) return;
-  if (state.day - state.milestones.lastNomadDay < NOMAD_COOLDOWN_DAYS) return;
-
-  const nrng = new Rng(deriveSeed(state.seed, `nomad-${state.day}`));
-  const target = singles[0]!;
-  const nomadSex: Sex = target.sex === 'female' ? 'male' : 'female';
-  const names = nomadSex === 'male' ? MALE_NAMES : FEMALE_NAMES;
+/** Spawn an opposite-sex adult wanderer for `target`, seeded by `tag`. */
+function spawnNewcomer(state: WorldState, target: Agent, tag: string): Agent {
+  const nrng = new Rng(deriveSeed(state.seed, tag));
+  const sex: Sex = target.sex === 'female' ? 'male' : 'female';
+  const names = sex === 'male' ? MALE_NAMES : FEMALE_NAMES;
   const nomad = spawnAgent({
     id: nextId(state),
     name: nrng.pick(names),
-    sex: nomadSex,
+    sex,
     birthDay: state.day - (ADULT_MIN_AGE_DAYS + nrng.int(2, 12)),
     generation: 0,
     position: { x: -(WORLD_HALF - 3), z: nrng.range(-8, 8) },
@@ -467,7 +527,32 @@ function maybeSpawnMate(state: WorldState, _rng: Rng): void {
   state.agents.push(nomad);
   state.milestones.lastNomadDay = state.day;
   if (!state.milestones.nomadArrived) state.milestones.nomadArrived = true;
+  return nomad;
+}
+
+/**
+ * A wandering mate arrives when a lone fertile adult has no eligible partner in
+ * the tribe. Generalises the SPEC nomad across generations so lineages can
+ * continue — gated by NOMAD_MIN_DAY, a built shelter, and a cooldown.
+ */
+function maybeSpawnMate(state: WorldState): void {
+  const target = newcomerCandidate(state);
+  if (!target) return;
+  if (state.day < NOMAD_MIN_DAY || !state.milestones.builtShelter) return;
+  if (state.day - state.milestones.lastNomadDay < NOMAD_COOLDOWN_DAYS) return;
+  pushNomad(state, spawnNewcomer(state, target, `nomad-${state.day}`));
+}
+
+/**
+ * Player intervention (stage 5): force a newcomer to arrive now, bypassing the
+ * natural gates. Returns the newcomer, or null when no lone lineage needs one.
+ */
+export function summonNewcomer(state: WorldState): Agent | null {
+  const target = newcomerCandidate(state);
+  if (!target) return null;
+  const nomad = spawnNewcomer(state, target, `summon-${state.tick}`);
   pushNomad(state, nomad);
+  return nomad;
 }
 
 /** Affection fades between agents who didn't interact today. */
@@ -526,6 +611,8 @@ export function toSaved(state: WorldState): SavedWorld {
     playerAgentId: state.playerAgentId,
     nextAgentId: state.nextAgentId,
     foodStock: state.foodStock,
+    playerPriorities: { ...state.playerPriorities },
+    playerPoints: state.playerPoints,
     structures: state.structures.map(cloneStructure),
     resources: state.resources.map(cloneResource),
     journal: state.journal.slice(),
@@ -549,6 +636,8 @@ export function hydrate(saved: SavedWorld): WorldState {
     playerAgentId: saved.playerAgentId,
     nextAgentId: saved.nextAgentId,
     foodStock: saved.foodStock,
+    playerPriorities: { ...saved.playerPriorities },
+    playerPoints: saved.playerPoints,
     structures: saved.structures.map(cloneStructure),
     resources: saved.resources.map(cloneResource),
     journal: saved.journal.slice(),
@@ -613,6 +702,8 @@ function cloneState(s: WorldState): WorldState {
     playerAgentId: s.playerAgentId,
     nextAgentId: s.nextAgentId,
     foodStock: s.foodStock,
+    playerPriorities: { ...s.playerPriorities },
+    playerPoints: s.playerPoints,
     structures: s.structures.map(cloneStructure),
     resources: s.resources.map(cloneResource),
     journal: s.journal.slice(),

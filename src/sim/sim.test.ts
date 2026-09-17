@@ -8,8 +8,11 @@
 import { describe, it, expect } from 'vitest';
 import { createWorld, tick } from './world';
 import { catchUp } from './catchup';
+import { scoreAction } from './utility';
+import { ACTIONS } from './actions';
+import { applyIntervention } from './player';
 import type { WorldState, Agent } from './types';
-import { TICKS_PER_DAY } from './balance';
+import { TICKS_PER_DAY, POINTS_START, COST_SPARK, PRIORITY_DEFAULT } from './balance';
 
 interface Run {
   final: WorldState;
@@ -108,10 +111,68 @@ describe('stages 1-4 combined (seed 42, ~400 days)', () => {
   });
 });
 
+describe('stage 5 — the player', () => {
+  it('a fresh world starts neutral: default priorities and a small purse', () => {
+    const w = createWorld(42);
+    expect(w.playerPoints).toBe(POINTS_START);
+    for (const cat of ['survival', 'social', 'research', 'building'] as const) {
+      expect(w.playerPriorities[cat]).toBe(PRIORITY_DEFAULT);
+    }
+  });
+
+  it('a priority slider scales the appeal of its category (playerMod)', () => {
+    const w = createWorld(1);
+    const a = w.agents[0]!;
+    const base = scoreAction(ACTIONS.wander, a, w); // wander is a survival action
+    expect(base).toBeGreaterThan(0);
+    w.playerPriorities.survival = 2;
+    expect(scoreAction(ACTIONS.wander, a, w)).toBeCloseTo(base * 2, 6);
+    w.playerPriorities.survival = 0.5;
+    expect(scoreAction(ACTIONS.wander, a, w)).toBeCloseTo(base * 0.5, 6);
+  });
+
+  it('banks points for presence and achievements over time', () => {
+    const w = tick(createWorld(42), TICKS_PER_DAY * 60);
+    expect(w.playerPoints).toBeGreaterThan(POINTS_START);
+  });
+
+  it('a spark opens the path to fire, costs points, and is journalled', () => {
+    const w = createWorld(3);
+    w.playerPoints = 50;
+    expect(w.knowledge.triggers.lightning).toBe(false);
+    expect(applyIntervention(w, 'spark')).toBe(true);
+    expect(w.knowledge.triggers.lightning).toBe(true);
+    expect(w.playerPoints).toBe(50 - COST_SPARK);
+    expect(w.journal.some((e) => e.kind === 'player')).toBe(true);
+  });
+
+  it('rejects an unaffordable or inapplicable intervention', () => {
+    const broke = createWorld(4);
+    broke.playerPoints = 0;
+    expect(applyIntervention(broke, 'inspiration')).toBe(false);
+
+    const rich = createWorld(4);
+    rich.playerPoints = 999;
+    expect(applyIntervention(rich, 'medicine')).toBe(false); // no one is in crisis
+    expect(rich.playerPoints).toBe(999); // nothing spent
+  });
+
+  it('an intervention leaves the live simulation deterministic', () => {
+    // Applying an intervention must not perturb rngState — a summoned newcomer
+    // is seeded from the world seed, not the live stream.
+    const a = tick(createWorld(9), TICKS_PER_DAY * 30);
+    const b = tick(createWorld(9), TICKS_PER_DAY * 30);
+    applyIntervention(a, 'spark'); // mutates a only
+    expect(a.rngState).toBe(b.rngState);
+    expect(tick(a, TICKS_PER_DAY).rngState).toBe(tick(b, TICKS_PER_DAY).rngState);
+  });
+});
+
 describe('determinism', () => {
   const subset = (s: WorldState) => ({
     tick: s.tick, day: s.day, hour: s.hour, rngState: s.rngState,
     season: s.season, weather: s.weather, foodStock: s.foodStock,
+    playerPoints: s.playerPoints, playerPriorities: s.playerPriorities,
     agents: s.agents, playerAgentId: s.playerAgentId, nextAgentId: s.nextAgentId,
     structures: s.structures, resources: s.resources,
     milestones: s.milestones, knowledge: s.knowledge,

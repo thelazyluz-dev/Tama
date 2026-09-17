@@ -2,13 +2,29 @@
 // code comments in English). Gender-neutral phrasing for the live HUD; the
 // journal itself (src/sim/events.ts) uses the SPEC's feminine voice.
 
-import type { Agent, NeedKey, Season, Weather, TechId } from '../sim';
+import type { Agent, NeedKey, Season, Weather, TechId, PriorityCategory, InterventionId } from '../sim';
 import { TICKS_PER_HOUR } from '../sim';
 
 export const TECH_LABEL: Record<TechId, { emoji: string; name: string }> = {
   stone_tools: { emoji: '🔪', name: 'כלי אבן' },
   fire: { emoji: '🔥', name: 'אש' },
   cooking: { emoji: '🍳', name: 'בישול' },
+};
+
+/** Stage 5: the four priority sliders (SPEC "עדיפויות"). */
+export const PRIORITY_LABEL: Record<PriorityCategory, { emoji: string; name: string }> = {
+  survival: { emoji: '🛟', name: 'הישרדות' },
+  social: { emoji: '❤️', name: 'חברה' },
+  research: { emoji: '💡', name: 'מחקר' },
+  building: { emoji: '🏠', name: 'בנייה' },
+};
+
+/** Stage 5: shop intervention icons (names/descriptions live in the sim). */
+export const INTERVENTION_EMOJI: Record<InterventionId, string> = {
+  spark: '⚡',
+  inspiration: '💡',
+  newcomer: '🚶',
+  medicine: '✚',
 };
 
 export const NEED_LABEL: Record<NeedKey, string> = {
@@ -68,6 +84,10 @@ export function actionText(agent: Agent): string {
       return arrived ? 'בניית מחסה' : 'בדרך לאתר הבנייה';
     case 'makeFire':
       return arrived ? 'הדלקת מדורה' : 'בדרך למדורה';
+    case 'experiment':
+      return arrived ? 'התנסות ורעיונות' : 'בדרך לחקור';
+    case 'socialize':
+      return arrived ? 'מבלה יחד' : 'בדרך למפגש';
     default:
       return '—';
   }

@@ -44,6 +44,10 @@ export function ReturnScreen(): JSX.Element | null {
           </ul>
         </div>
 
+        <div className="return-points">
+          💠 <strong>{Math.floor(world.playerPoints)}</strong> נקודות השפעה ממתינות לך
+        </div>
+
         <button type="button" className="return-btn" onClick={enterGame}>
           המשך לעמק
         </button>

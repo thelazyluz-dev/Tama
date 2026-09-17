@@ -627,6 +627,269 @@ body {
   transform: translateY(1px);
 }
 
+/* ---- Player journal line (stage 5: the player's own hand in the story) ---- */
+.journal-entry.j-player .journal-text {
+  color: #c9a6ff;
+}
+
+/* ---- Player influence panel (stage 5) ---- */
+.player-wrap {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.player-toggle {
+  pointer-events: auto;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.pt-points {
+  color: #f5c451;
+  font-variant-numeric: tabular-nums;
+}
+
+.player-panel {
+  width: 268px;
+  max-width: calc(100vw - 32px);
+  max-height: 66vh;
+  overflow-y: auto;
+  padding: 12px 14px 14px;
+}
+
+.player-points-big {
+  font-size: 20px;
+  font-weight: 800;
+  color: #f5c451;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pp-diamond {
+  font-size: 16px;
+}
+
+.pp-unit {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.player-section-head {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 14px 0 7px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.priority-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.priority-row {
+  display: grid;
+  grid-template-columns: 82px 1fr 34px;
+  align-items: center;
+  gap: 8px;
+}
+
+.priority-label {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.priority-slider {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.priority-value {
+  font-size: 12px;
+  text-align: end;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.priority-value.up {
+  color: #86e0a0;
+  font-weight: 700;
+}
+
+.priority-value.down {
+  color: #f0b45a;
+  font-weight: 700;
+}
+
+.shop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shop-item {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--panel-border);
+}
+
+.shop-item.locked {
+  opacity: 0.5;
+}
+
+.shop-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.shop-item-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.shop-buy {
+  pointer-events: auto;
+  border: 1px solid rgba(245, 196, 81, 0.4);
+  border-radius: 8px;
+  background: rgba(245, 196, 81, 0.14);
+  color: #f5c451;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.15s, filter 0.15s;
+}
+
+.shop-buy:hover:not(:disabled) {
+  background: rgba(245, 196, 81, 0.26);
+}
+
+.shop-buy:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.shop-item-desc {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  margin-top: 5px;
+}
+
+/* ---- Crisis alert (stage 5: the urgent moment) ---- */
+.crisis-alert {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100vw - 32px);
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(60, 12, 12, 0.86);
+  border: 1px solid rgba(255, 125, 125, 0.5);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 8;
+  animation: crisis-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes crisis-pulse {
+  0%, 100% { border-color: rgba(255, 125, 125, 0.5); }
+  50% { border-color: rgba(255, 125, 125, 0.95); }
+}
+
+.crisis-text {
+  font-size: 13px;
+  color: #ffdede;
+  white-space: nowrap;
+}
+
+.crisis-mark {
+  margin-inline-end: 4px;
+}
+
+.crisis-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.crisis-rescue {
+  pointer-events: auto;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ff8f8f, #e05a5a);
+  color: #2a0606;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: filter 0.15s;
+}
+
+.crisis-rescue:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.crisis-rescue:disabled {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+
+.crisis-dismiss {
+  pointer-events: auto;
+  border: none;
+  background: none;
+  color: #ffb0b0;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+/* ---- Return screen: points waiting (stage 5) ---- */
+.return-points {
+  margin: 0 0 18px;
+  font-size: 15px;
+  color: #f5c451;
+  font-weight: 600;
+}
+
+.return-points strong {
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---- Mobile: shrink panels so they stay in the corners, not over the scene.
    The camera follows the agent, so the centre of the screen stays clear. ---- */
 @media (max-width: 700px) {
@@ -688,5 +951,34 @@ body {
     min-width: 38px;
     padding: 6px 9px;
     font-size: 13px;
+  }
+  /* Influence panel: tuck the toggle above the speed bar, keep the panel
+     within the viewport and scrollable. */
+  .player-wrap {
+    bottom: 52px;
+    right: 10px;
+  }
+  .player-toggle {
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+  .player-panel {
+    width: 84vw;
+    max-width: 300px;
+    max-height: 62vh;
+  }
+  /* Crisis alert spans the top so it stays legible on a narrow phone. */
+  .crisis-alert {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    transform: none;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 9px;
+  }
+  .crisis-text {
+    font-size: 11px;
+    white-space: normal;
   }
 }

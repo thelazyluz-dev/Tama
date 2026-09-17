@@ -186,3 +186,19 @@ export function pushKnowledgeLoss(state: WorldState, child: Agent, parent: Agent
 export function pushHandoff(state: WorldState, heir: Agent): void {
   add(state, 'mood', 3, `העדשה עוברת אל ${heir.name}. השושלת ממשיכה.`);
 }
+
+// --- Stage 5: the player's interventions (SPEC "מנגנון ההשפעה") -------------
+// Every intervention leaves a mark in the journal, so the player's own hand is
+// part of the chronicle (CLAUDE.md: a system with no journal text isn't ready).
+
+export function pushSpark(state: WorldState, agent: Agent): void {
+  add(state, 'player', 3, `${agent.name} — ניצוץ נפל בעמק כמו מתנה. עכשיו אפשר ללמוד אש.`);
+}
+
+export function pushInspiration(state: WorldState, agent: Agent): void {
+  add(state, 'player', 2, `${agent.name} — רוח של השראה עברה. המחשבות זרמו והמחקר קפץ קדימה.`);
+}
+
+export function pushMedicine(state: WorldState, agent: Agent): void {
+  add(state, 'player', 3, `${agent.name} — כוחות חדשים נמזגו ברגע האחרון. הבריאות חוזרת.`);
+}

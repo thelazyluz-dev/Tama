@@ -13,6 +13,7 @@ const KIND_CLASS: Partial<Record<JournalKind, string>> = {
   discovery: 'j-build',
   season: 'j-season',
   weather: 'j-season',
+  player: 'j-player',
 };
 
 export function JournalPanel(): JSX.Element {

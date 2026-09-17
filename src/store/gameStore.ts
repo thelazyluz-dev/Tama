@@ -3,8 +3,18 @@
 // contains simulation logic — it only calls into src/sim.
 
 import { create } from 'zustand';
-import type { WorldState } from '../sim';
-import { createWorld, tick, toSaved, hydrate, catchUp, ticksToDaysHours, SPEED_STEPS } from '../sim';
+import type { WorldState, PriorityCategory, InterventionId } from '../sim';
+import {
+  createWorld,
+  tick,
+  toSaved,
+  hydrate,
+  catchUp,
+  ticksToDaysHours,
+  SPEED_STEPS,
+  applyIntervention,
+  clampPriority,
+} from '../sim';
 import { saveGame, loadGame, clearGame } from './persistence';
 
 export type Phase = 'return' | 'playing';
@@ -33,6 +43,10 @@ export interface GameStore {
   newGame: () => void;
   /** Rename the current agent (a cosmetic the player controls). */
   renameAgent: (name: string) => void;
+  /** Stage 5: set a priority slider (SPEC channel 1 — nudges appeal, ×0.5..×2). */
+  setPriority: (category: PriorityCategory, value: number) => void;
+  /** Stage 5: spend points on a shop intervention. Returns whether it applied. */
+  buyIntervention: (id: InterventionId) => boolean;
 }
 
 interface Boot {
@@ -122,5 +136,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const world = { ...w, agents };
     saveGame(toSaved(world), Date.now());
     set({ world });
+  },
+
+  setPriority: (category, value) => {
+    const w = get().world;
+    const clamped = clampPriority(value);
+    if (w.playerPriorities[category] === clamped) return;
+    const world = { ...w, playerPriorities: { ...w.playerPriorities, [category]: clamped } };
+    saveGame(toSaved(world), Date.now());
+    set({ world });
+  },
+
+  buyIntervention: (id) => {
+    // tick(_, 0) hands back a deep clone; the intervention mutates only that.
+    const draft = tick(get().world, 0);
+    const ok = applyIntervention(draft, id);
+    if (ok) {
+      saveGame(toSaved(draft), Date.now());
+      set({ world: draft });
+    }
+    return ok;
   },
 }));

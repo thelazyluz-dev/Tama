@@ -75,10 +75,12 @@ export type StructureType = 'shelter' | 'fire';
 /**
  * AI behaviour profile. 'sensible' prepares for winter (fills the food store,
  * builds shelter, keeps a fire). 'reactive' only answers immediate needs — used
- * to model a neglected agent for the stage-1 transition test, and the seam
- * where stage 5's player priorities will plug in.
+ * to model a neglected agent for the stage-1 transition test.
  */
 export type AiProfile = 'sensible' | 'reactive';
+
+/** Stage 5: the categories the player nudges via priority sliders. */
+export type PriorityCategory = 'survival' | 'social' | 'research' | 'building';
 
 export interface Vec2 {
   x: number;
@@ -128,7 +130,8 @@ export type JournalKind =
   | 'weather'
   | 'discovery'
   | 'social'
-  | 'birth';
+  | 'birth'
+  | 'player';
 
 export interface JournalEntry {
   day: number;
@@ -200,6 +203,10 @@ export interface WorldState {
   nextAgentId: number;
   /** Shared tribe food store (SPEC: the character economy belongs to the world). */
   foodStock: number;
+  /** Stage 5: the player's priority sliders (0.5..2, ×1 = neutral). */
+  playerPriorities: Record<PriorityCategory, number>;
+  /** Stage 5: the player's point balance (SPEC "ניקוד השחקן", crosses generations). */
+  playerPoints: number;
   structures: Structure[];
   journal: JournalEntry[];
   milestones: Milestones;
@@ -224,6 +231,8 @@ export interface SavedWorld {
   playerAgentId: string;
   nextAgentId: number;
   foodStock: number;
+  playerPriorities: Record<PriorityCategory, number>;
+  playerPoints: number;
   structures: Structure[];
   resources: ResourceNode[];
   journal: JournalEntry[];
