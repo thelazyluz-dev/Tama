@@ -3,7 +3,7 @@
 // comfortable, and has a death-spiral guard (a per-day damage floor + youth
 // grace). Pure.
 
-import type { WorldState, NeedKey } from './types';
+import type { WorldState, Agent, NeedKey } from './types';
 import {
   HEALTH_DAMAGE_THRESHOLD,
   HEALTH_DAMAGE_PER_DAY,
@@ -24,9 +24,8 @@ export interface HealthResult {
   leftCrisis: boolean;
 }
 
-/** Update health for one tick; may kill the agent. Mutates in place. */
-export function updateHealth(state: WorldState): HealthResult {
-  const a = state.agent;
+/** Update one agent's health for one tick; may kill it. Mutates in place. */
+export function updateHealth(state: WorldState, a: Agent): HealthResult {
   const result: HealthResult = { justDied: false, enteredCrisis: false, leftCrisis: false };
   if (!a.alive) return result;
 
@@ -47,7 +46,7 @@ export function updateHealth(state: WorldState): HealthResult {
   }
 
   // Youth grace, then the per-day damage floor (no free-fall).
-  if (state.day < YOUTH_GRACE_DAYS) damagePerDay *= YOUTH_GRACE_FACTOR;
+  if (state.day - a.birthDay < YOUTH_GRACE_DAYS) damagePerDay *= YOUTH_GRACE_FACTOR;
   damagePerDay = Math.min(damagePerDay, HEALTH_MAX_DAMAGE_PER_DAY);
 
   let netPerDay = -damagePerDay;

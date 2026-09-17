@@ -4,7 +4,7 @@
 // TRIGGER (fire needs a witnessed lightning storm), turning each discovery into
 // a story rather than a line on a tech tree. Pure.
 
-import type { WorldState, TechId, SkillKey, KnowledgeState, NeedKey } from './types';
+import type { WorldState, Agent, TechId, SkillKey, KnowledgeState, NeedKey } from './types';
 import {
   DISCOVERY_RATE,
   SKILL_GAIN_PER_EXPERIMENT,
@@ -66,18 +66,16 @@ export function hasDiscoverable(state: WorldState): boolean {
 const SURVIVAL: NeedKey[] = ['hunger', 'thirst', 'warmth', 'fatigue', 'safety'];
 
 /** Only a comfortable, healthy agent has the slack to tinker (SPEC dynamic). */
-export function comfortableForResearch(state: WorldState): boolean {
-  const a = state.agent;
-  if (a.health < EXPERIMENT_MIN_HEALTH) return false;
-  return SURVIVAL.every((k) => a.needs[k] < EXPERIMENT_COMFORT);
+export function comfortableForResearch(_state: WorldState, agent: Agent): boolean {
+  if (agent.health < EXPERIMENT_MIN_HEALTH) return false;
+  return SURVIVAL.every((k) => agent.needs[k] < EXPERIMENT_COMFORT);
 }
 
 /**
  * One tick of experimenting: raise the relevant skills and push research toward
  * each available tech; returns any techs newly discovered this tick. Mutates.
  */
-export function attemptDiscovery(state: WorldState): TechId[] {
-  const agent = state.agent;
+export function attemptDiscovery(state: WorldState, agent: Agent): TechId[] {
   const discovered: TechId[] = [];
   for (const tech of availableTechs(state.knowledge)) {
     agent.skills[tech.domain] = Math.min(100, agent.skills[tech.domain] + SKILL_GAIN_PER_EXPERIMENT);

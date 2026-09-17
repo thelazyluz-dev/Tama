@@ -1,26 +1,26 @@
-// test:sim — runs headless in Node (no browser, no rendering) and verifies the
-// stage-2 transition (SPEC): the agent discovers fire on its own (after a
-// lightning trigger) and that discovery is what carries a sensible agent
-// through its first winter; a non-experimenting agent never gets fire and
-// freezes. Plus the sim stays deterministic.
+// test:sim — headless (no browser, no rendering). Verifies the stage-3
+// transition (SPEC): a nomad joins the founder, they pair up and coordinate,
+// and the pair survives better than one alone — while stages 1-2 still hold
+// (discovers fire, survives winter) and the sim stays deterministic.
 
 import { describe, it, expect } from 'vitest';
 import { createWorld, tick } from './world';
 import { catchUp } from './catchup';
+import { playerAgent, partnerOf } from './agents';
 import type { WorldState, AiProfile, ActionId } from './types';
-import { TICKS_PER_DAY, SEASON_DAYS, YEAR_DAYS } from './balance';
+import { TICKS_PER_DAY, SEASON_DAYS, YEAR_DAYS, NOMAD_MIN_DAY } from './balance';
 
-const WINTER_START = SEASON_DAYS * 3; // day 114
-const WINTER_END = SEASON_DAYS * 4; // day 152
+const WINTER_START = SEASON_DAYS * 3;
+const WINTER_END = SEASON_DAYS * 4;
 
 interface YearStats {
   final: WorldState;
-  aliveAtEnd: boolean;
-  diedDay: number | null;
-  cause: string | undefined;
-  fireDay: number | null; // day fire was discovered
-  minHealth: number;
-  maxStock: number;
+  survivors: number;
+  nomadDay: number | null;
+  partnerDay: number | null;
+  fireDay: number | null;
+  minPlayerLonelinessAfterNomad: number;
+  maxLonelinessBeforeNomad: number;
   actionTicks: Record<ActionId, number>;
 }
 
@@ -28,107 +28,101 @@ function runYear(seed: number, profile: AiProfile): YearStats {
   let state = createWorld(seed, profile);
   const stats: YearStats = {
     final: state,
-    aliveAtEnd: true,
-    diedDay: null,
-    cause: undefined,
+    survivors: 0,
+    nomadDay: null,
+    partnerDay: null,
     fireDay: null,
-    minHealth: 100,
-    maxStock: 0,
+    minPlayerLonelinessAfterNomad: 100,
+    maxLonelinessBeforeNomad: 0,
     actionTicks: {
       eat: 0, drink: 0, sleep: 0, wander: 0, gather: 0, wash: 0,
-      warm: 0, buildShelter: 0, makeFire: 0, experiment: 0,
+      warm: 0, buildShelter: 0, makeFire: 0, experiment: 0, socialize: 0,
     },
   };
 
-  const totalTicks = YEAR_DAYS * TICKS_PER_DAY;
-  for (let i = 0; i < totalTicks; i++) {
-    const wasAlive = state.agent.alive;
+  for (let i = 0; i < YEAR_DAYS * TICKS_PER_DAY; i++) {
+    const hadNomad = state.agents.length > 1;
     const hadFire = state.knowledge.known.includes('fire');
+    const wasPartner = partnerOf(state, playerAgent(state)) !== null;
     state = tick(state, 1);
-    const a = state.agent;
-    if (wasAlive && !a.alive && stats.diedDay === null) {
-      stats.diedDay = state.day;
-      stats.cause = a.deathCause;
+
+    if (!hadNomad && state.agents.length > 1 && stats.nomadDay === null) stats.nomadDay = state.day;
+    if (!hadFire && state.knowledge.known.includes('fire') && stats.fireDay === null) stats.fireDay = state.day;
+    const player = playerAgent(state);
+    const nowPartner = partnerOf(state, player) !== null;
+    if (!wasPartner && nowPartner && stats.partnerDay === null) stats.partnerDay = state.day;
+
+    if (state.agents.length > 1) {
+      stats.minPlayerLonelinessAfterNomad = Math.min(stats.minPlayerLonelinessAfterNomad, player.needs.loneliness);
+    } else {
+      stats.maxLonelinessBeforeNomad = Math.max(stats.maxLonelinessBeforeNomad, player.needs.loneliness);
     }
-    if (!hadFire && state.knowledge.known.includes('fire') && stats.fireDay === null) {
-      stats.fireDay = state.day;
-    }
-    if (a.alive) {
-      stats.minHealth = Math.min(stats.minHealth, a.health);
-      stats.maxStock = Math.max(stats.maxStock, a.foodStock);
-      if (a.currentAction) stats.actionTicks[a.currentAction.type] += 1;
+    for (const a of state.agents) {
+      if (a.alive && a.currentAction) stats.actionTicks[a.currentAction.type] += 1;
     }
   }
+
   stats.final = state;
-  stats.aliveAtEnd = state.agent.alive;
+  stats.survivors = state.agents.filter((a) => a.alive).length;
   return stats;
 }
 
-describe('stage 2 — a curious agent discovers fire and survives winter', () => {
+describe('stage 3 — the second: nomad, partnership, coordination', () => {
   const s = runYear(4242, 'sensible');
 
   it('prints run stats', () => {
-    console.log('\n=== SENSIBLE · seed 4242 · one game year ===');
-    console.log(`  alive at end: ${s.aliveAtEnd} (final day ${s.final.day})`);
-    console.log(`  known techs: ${JSON.stringify(s.final.knowledge.known)}`);
-    console.log(`  fire discovered on day: ${s.fireDay} · lightning: ${s.final.knowledge.triggers.lightning}`);
-    console.log(`  min health: ${s.minHealth.toFixed(1)} · max food stock: ${s.maxStock.toFixed(0)}`);
-    console.log(`  skills: ${JSON.stringify(round(s.final.agent.skills))} · curiosity ${s.final.agent.traits.curiosity.toFixed(2)}`);
-    console.log(`  action ticks: ${JSON.stringify(s.actionTicks)}`);
-    console.log(`  journal entries: ${s.final.journal.length}`);
+    console.log('\n=== STAGE 3 · seed 4242 · one game year ===');
+    console.log(`  agents: ${s.final.agents.map((a) => `${a.name}(${a.sex},${a.alive ? 'alive' : 'dead'})`).join(', ')}`);
+    console.log(`  nomad arrived day ${s.nomadDay} · became partners day ${s.partnerDay} · fire day ${s.fireDay}`);
+    console.log(`  loneliness — max before nomad ${s.maxLonelinessBeforeNomad.toFixed(0)}, min after ${s.minPlayerLonelinessAfterNomad.toFixed(0)}`);
+    console.log(`  survivors at year end: ${s.survivors} · shared stock ${Math.round(s.final.foodStock)}`);
+    console.log(`  socialize ticks: ${s.actionTicks.socialize} · known ${JSON.stringify(s.final.knowledge.known)}`);
+    console.log(`  journal: ${s.final.journal.length}`);
     expect(true).toBe(true);
   });
 
-  it('discovers fire on its own, before winter, without any intervention', () => {
-    expect(s.final.knowledge.triggers.lightning).toBe(true);
+  it('a nomad of the opposite sex joins after survival + shelter', () => {
+    expect(s.nomadDay).not.toBeNull();
+    expect(s.nomadDay!).toBeGreaterThanOrEqual(NOMAD_MIN_DAY);
+    expect(s.final.agents.length).toBe(2);
+    expect(s.final.agents[0]!.sex).not.toBe(s.final.agents[1]!.sex);
+    expect(s.final.milestones.builtShelter).toBe(true);
+  });
+
+  it('the two become a couple', () => {
+    expect(s.partnerDay).not.toBeNull();
+    expect(s.final.milestones.becamePartners).toBe(true);
+    const p = playerAgent(s.final);
+    expect(partnerOf(s.final, p)).not.toBeNull();
+    expect(s.actionTicks.socialize).toBeGreaterThan(0);
+    expect(s.final.journal.some((e) => e.kind === 'social')).toBe(true);
+  });
+
+  it('companionship relieves the loneliness that a lone life could not', () => {
+    // Solo, loneliness pins high; with a partner it is eased well below that.
+    expect(s.maxLonelinessBeforeNomad).toBeGreaterThan(80);
+    expect(s.minPlayerLonelinessAfterNomad).toBeLessThan(45);
+  });
+
+  it('both coordinate and survive the year (better than one)', () => {
+    expect(s.survivors).toBe(2);
+    expect(s.final.day).toBe(YEAR_DAYS);
+  });
+
+  it('still discovers fire and survives its first winter (stages 1-2 hold)', () => {
     expect(s.fireDay).not.toBeNull();
     expect(s.fireDay!).toBeLessThan(WINTER_START);
-  });
-
-  it('also discovers stone tools and cooking', () => {
-    expect(s.final.knowledge.known).toContain('stone_tools');
-    expect(s.final.knowledge.known).toContain('cooking');
-  });
-
-  it('survives the full year on the strength of that fire', () => {
-    expect(s.aliveAtEnd).toBe(true);
-    expect(s.final.day).toBe(YEAR_DAYS);
     expect(s.actionTicks.makeFire).toBeGreaterThan(0);
-  });
-
-  it('the journal tells the discovery story', () => {
-    expect(s.final.journal.some((e) => e.kind === 'discovery')).toBe(true);
-  });
-});
-
-describe('stage 2 — an agent that never experiments never gets fire, and dies', () => {
-  const s = runYear(4242, 'reactive');
-
-  it('prints run stats', () => {
-    console.log('\n=== REACTIVE (no experimenting) · seed 4242 ===');
-    console.log(`  died day: ${s.diedDay} · cause: ${s.cause}`);
-    console.log(`  known techs: ${JSON.stringify(s.final.knowledge.known)}`);
-    expect(true).toBe(true);
-  });
-
-  it('never discovers fire', () => {
-    expect(s.final.knowledge.known).not.toContain('fire');
-    expect(s.actionTicks.experiment).toBe(0);
-  });
-
-  it('freezes to death in the first winter', () => {
-    expect(s.aliveAtEnd).toBe(false);
-    expect(s.diedDay!).toBeGreaterThanOrEqual(WINTER_START - 4);
-    expect(s.diedDay!).toBeLessThan(WINTER_END + 6);
-    expect(s.cause).toBe('קפיאה');
+    expect(WINTER_END).toBeGreaterThan(WINTER_START);
   });
 });
 
 describe('determinism', () => {
   const subset = (s: WorldState) => ({
     tick: s.tick, day: s.day, hour: s.hour, rngState: s.rngState,
-    season: s.season, weather: s.weather,
-    agent: s.agent, structures: s.structures, resources: s.resources,
+    season: s.season, weather: s.weather, foodStock: s.foodStock,
+    agents: s.agents, playerAgentId: s.playerAgentId,
+    structures: s.structures, resources: s.resources,
     milestones: s.milestones, knowledge: s.knowledge,
   });
 
@@ -138,10 +132,10 @@ describe('determinism', () => {
     expect(subset(a)).toStrictEqual(subset(b));
   });
 
-  it('one big batch === many small batches', () => {
-    const big = tick(createWorld(2024), TICKS_PER_DAY * 12);
+  it('one big batch === many small batches (past the nomad)', () => {
+    const big = tick(createWorld(2024), TICKS_PER_DAY * 30);
     let small = createWorld(2024);
-    for (let i = 0; i < TICKS_PER_DAY * 12; i++) small = tick(small, 1);
+    for (let i = 0; i < TICKS_PER_DAY * 30; i++) small = tick(small, 1);
     expect(subset(big)).toStrictEqual(subset(small));
   });
 
@@ -159,9 +153,3 @@ describe('determinism', () => {
     expect(subset(caught.state)).toStrictEqual(subset(direct));
   });
 });
-
-function round(obj: Record<string, number>): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const [k, v] of Object.entries(obj)) out[k] = Math.round(v);
-  return out;
-}

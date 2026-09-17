@@ -118,7 +118,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const trimmed = name.trim().slice(0, 20);
     if (!trimmed) return;
     const w = get().world;
-    const world = { ...w, agent: { ...w.agent, name: trimmed } };
+    const agents = w.agents.map((a) => (a.id === w.playerAgentId ? { ...a, name: trimmed } : a));
+    const world = { ...w, agents };
     saveGame(toSaved(world), Date.now());
     set({ world });
   },

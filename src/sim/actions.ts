@@ -1,15 +1,17 @@
-// The stage-1 action table. Appeal formulas follow SPEC "מנוע ההחלטות" — needs
-// enter appeal SQUARED. Some actions carry side effects beyond need deltas
-// (gather fills the store, eat draws it down, building creates structures);
-// those run through performTick/onComplete hooks, invoked by world.ts.
+// The action table. Appeal formulas follow SPEC "מנוע ההחלטות" — needs enter
+// appeal SQUARED. Side effects beyond need deltas (gather fills the shared
+// store, eat draws it down, building creates structures, socialising builds
+// affection) run through performTick/onComplete hooks, invoked per acting agent
+// by world.ts.
 //
 // Scoring (utility.ts) is RNG-free; only committing a fresh wander destination
 // consumes RNG, keeping the sim deterministic.
 
-import type { Agent, WorldState, ActionId, NeedKey, Vec2, Structure } from './types';
+import type { Agent, WorldState, ActionId, NeedKey, Vec2 } from './types';
 import { nearestResource } from './resources';
 import { nearestStructure, hasShelter, anyLitFire } from './structures';
 import { efficiency } from './needs';
+import { nearestOtherAgent, getAgent, ensureRelation } from './agents';
 import {
   fireKnown,
   gatherMultiplier,
@@ -43,6 +45,10 @@ import {
   FIRE_FUEL_PER_MAKE,
   FIRE_RADIUS,
   EXPERIMENT_APPEAL,
+  SOCIALIZE_APPEAL,
+  SOCIALIZE_LONELINESS_RELIEF,
+  AFFECTION_GAIN_PER_TICK,
+  TRUST_GAIN_PER_TICK,
 } from './balance';
 
 export interface ResolvedTarget {
@@ -58,10 +64,10 @@ export interface ActionDef {
   commitTarget(agent: Agent, world: WorldState, rng: Rng): ResolvedTarget | null;
   durationTicks: number;
   effect: Partial<Record<NeedKey, number>>;
-  /** Extra side effect each in-range tick (e.g. gather, eat). */
-  performTick?(state: WorldState): void;
-  /** Side effect when the action completes (e.g. place a structure). */
-  onComplete?(state: WorldState): void;
+  /** Extra side effect each in-range tick, for the acting agent. */
+  performTick?(state: WorldState, agent: Agent): void;
+  /** Side effect when the action completes, for the acting agent. */
+  onComplete?(state: WorldState, agent: Agent): void;
 }
 
 function sq(x: number): number {
@@ -73,32 +79,30 @@ function isNight(hour: number): boolean {
 function isReactive(world: WorldState): boolean {
   return world.aiProfile === 'reactive';
 }
-/** Prep actions matter far more as winter looms. */
 function prepBonus(world: WorldState): number {
   if (world.season === 'winter') return WINTER_PREP_BONUS;
   if (world.season === 'autumn') return WINTER_PREP_BONUS * 0.65;
   return 1;
 }
-/** Where the agent makes its home — beside the shelter if one exists. */
-function campSpot(world: WorldState): Vec2 {
-  const shelter = nearestStructure(world.structures, 'shelter', world.agent.position);
-  return shelter ? { ...shelter.position } : { ...world.agent.position };
+/** Where an agent makes its home — beside the shelter if one exists. */
+function campSpot(world: WorldState, agent: Agent): Vec2 {
+  const shelter = nearestStructure(world.structures, 'shelter', agent.position);
+  return shelter ? { ...shelter.position } : { ...agent.position };
 }
 
 const eat: ActionDef = {
   id: 'eat',
   appeal: (a) => sq(a.needs.hunger / 100),
-  feasibility: (a) => (a.foodStock > 0 ? 1 : 0),
+  feasibility: (_a, w) => (w.foodStock > 0 ? 1 : 0),
   scoringTarget: (a) => a.position, // eaten from the store, in place
   commitTarget: (a) => ({ pos: { ...a.position } }),
   durationTicks: ACTION.eat.durationTicks,
   effect: {},
-  performTick: (state) => {
-    const a = state.agent;
-    if (a.foodStock <= 0) return;
-    const perTick = Math.min(EAT_FROM_STOCK / ACTION.eat.durationTicks, a.foodStock);
-    a.foodStock -= perTick;
-    a.needs.hunger -= perTick * HUNGER_PER_FOOD * hungerReliefMultiplier(state);
+  performTick: (state, agent) => {
+    if (state.foodStock <= 0) return;
+    const perTick = Math.min(EAT_FROM_STOCK / ACTION.eat.durationTicks, state.foodStock);
+    state.foodStock -= perTick;
+    agent.needs.hunger -= perTick * HUNGER_PER_FOOD * hungerReliefMultiplier(state);
   },
 };
 
@@ -120,7 +124,7 @@ const sleep: ActionDef = {
   appeal: (a, w) => sq(a.needs.fatigue / 100) * (isNight(w.hour) ? NIGHT_SLEEP_BONUS : DAY_SLEEP_BONUS),
   feasibility: () => 1,
   scoringTarget: (a) => a.position,
-  commitTarget: (_a, w) => ({ pos: campSpot(w) }), // sleep at camp when there is one
+  commitTarget: (a, w) => ({ pos: campSpot(w, a) }),
   durationTicks: ACTION.sleep.durationTicks,
   effect: ACTION.sleep.effect,
 };
@@ -167,12 +171,10 @@ const wander: ActionDef = {
 const gather: ActionDef = {
   id: 'gather',
   appeal: (a, w) => {
-    if (w.season === 'winter') return 0; // no fruit to gather
+    if (w.season === 'winter') return 0;
     const seasonMult = w.season === 'autumn' ? GATHER_AUTUMN_BONUS : 1;
-    // Proactive stockpiling (suppressed for a reactive/neglected agent)...
-    const proactive = isReactive(w) ? 0 : GATHER_STOCK_APPEAL * (1 - a.foodStock / FOOD_STOCK_CAP);
-    // ...plus a reactive pull when hungry with an empty store.
-    const reactive = a.foodStock < EAT_FROM_STOCK ? sq(a.needs.hunger / 100) * 1.2 : 0;
+    const proactive = isReactive(w) ? 0 : GATHER_STOCK_APPEAL * (1 - w.foodStock / FOOD_STOCK_CAP);
+    const reactive = w.foodStock < EAT_FROM_STOCK ? sq(a.needs.hunger / 100) * 1.2 : 0;
     return proactive * seasonMult + reactive;
   },
   feasibility: (a, w) =>
@@ -185,17 +187,16 @@ const gather: ActionDef = {
   },
   durationTicks: ACTION.gather.durationTicks,
   effect: {},
-  performTick: (state) => {
-    const a = state.agent;
-    const action = a.currentAction;
+  performTick: (state, agent) => {
+    const action = agent.currentAction;
     if (!action?.targetId) return;
     const node = state.resources.find((r) => r.id === action.targetId);
     if (!node || node.quantity <= 0) return;
-    const room = FOOD_STOCK_CAP - a.foodStock;
-    const amount = Math.min(GATHER_RATE * efficiency(state) * gatherMultiplier(state), node.quantity, room);
+    const room = FOOD_STOCK_CAP - state.foodStock;
+    const amount = Math.min(GATHER_RATE * efficiency(agent) * gatherMultiplier(state), node.quantity, room);
     if (amount <= 0) return;
     node.quantity -= amount;
-    a.foodStock += amount;
+    state.foodStock += amount;
   },
 };
 
@@ -208,15 +209,14 @@ const buildShelter: ActionDef = {
   },
   feasibility: (_a, w) => (hasShelter(w) ? 0 : 1),
   scoringTarget: (a) => a.position,
-  commitTarget: (a) => ({ pos: { ...a.position } }), // build where you stand
+  commitTarget: (a) => ({ pos: { ...a.position } }),
   durationTicks: ACTION.buildShelter.durationTicks,
   effect: {},
-  onComplete: (state) => {
+  onComplete: (state, agent) => {
     if (hasShelter(state)) return;
-    const action = state.agent.currentAction;
-    const pos = action ? { ...action.targetPos } : { ...state.agent.position };
-    const shelter: Structure = { id: `shelter-${state.tick}`, type: 'shelter', position: pos, fuel: 0 };
-    state.structures.push(shelter);
+    const action = agent.currentAction;
+    const pos = action ? { ...action.targetPos } : { ...agent.position };
+    state.structures.push({ id: `shelter-${state.tick}`, type: 'shelter', position: pos, fuel: 0 });
     state.milestones.builtShelter = true;
   },
 };
@@ -225,7 +225,6 @@ const makeFire: ActionDef = {
   id: 'makeFire',
   appeal: (a, w) => {
     if (isReactive(w)) return 0;
-    // Back off while a well-fuelled fire is already burning anywhere in camp.
     const fire = anyLitFire(w);
     const supplied = fire && fire.fuel > FIRE_FUEL_START * 0.4 ? 0.05 : 1;
     const cold = 0.4 + sq(a.needs.warmth / 100);
@@ -233,13 +232,12 @@ const makeFire: ActionDef = {
   },
   feasibility: (_a, w) => (fireKnown(w) ? 1 : 0),
   scoringTarget: (a) => a.position,
-  commitTarget: (_a, w) => ({ pos: campSpot(w) }),
+  commitTarget: (a, w) => ({ pos: campSpot(w, a) }),
   durationTicks: ACTION.makeFire.durationTicks,
   effect: {},
-  onComplete: (state) => {
-    const action = state.agent.currentAction;
-    const pos = action ? { ...action.targetPos } : { ...state.agent.position };
-    // Re-fuel an existing nearby fire, or light a new one.
+  onComplete: (state, agent) => {
+    const action = agent.currentAction;
+    const pos = action ? { ...action.targetPos } : { ...agent.position };
     let fire = nearestStructure(state.structures, 'fire', pos);
     const near =
       fire &&
@@ -254,13 +252,13 @@ const makeFire: ActionDef = {
   },
 };
 
-// Experiment / התנסות — the discovery action. Only appealing when the agent is
-// comfortable and there is something to discover (SPEC: surplus -> progress).
+// Experiment / התנסות — discovery only when comfortable and something remains
+// to be discovered (SPEC: surplus -> progress).
 const experiment: ActionDef = {
   id: 'experiment',
   appeal: (a, w) => {
     if (isReactive(w) || !hasDiscoverable(w)) return 0;
-    const met = comfortableForResearch(w) ? 1 : 0.1;
+    const met = comfortableForResearch(w, a) ? 1 : 0.1;
     return a.traits.curiosity * met * EXPERIMENT_APPEAL;
   },
   feasibility: (_a, w) => (hasDiscoverable(w) ? 1 : 0),
@@ -268,8 +266,45 @@ const experiment: ActionDef = {
   commitTarget: (a) => ({ pos: { ...a.position } }),
   durationTicks: ACTION.experiment.durationTicks,
   effect: ACTION.experiment.effect,
-  performTick: (state) => {
-    for (const tech of attemptDiscovery(state)) pushDiscovery(state, tech);
+  performTick: (state, agent) => {
+    for (const tech of attemptDiscovery(state, agent)) pushDiscovery(state, agent, tech);
+  },
+};
+
+// Socialize / חיזור — spend time with another agent, building affection and
+// easing loneliness (SPEC "חיזור וזוגיות").
+const socialize: ActionDef = {
+  id: 'socialize',
+  appeal: (a, w) => {
+    const other = nearestOtherAgent(w, a);
+    if (!other) return 0;
+    const rel = a.relations[other.id];
+    const courtDrive = !rel || rel.kind !== 'partner' ? 0.35 : 0.12;
+    const lonely = a.needs.loneliness / 100;
+    return SOCIALIZE_APPEAL * (courtDrive + lonely) * (0.5 + a.traits.sociability);
+  },
+  feasibility: (a, w) => (nearestOtherAgent(w, a) ? 1 : 0),
+  scoringTarget: (a, w) => nearestOtherAgent(w, a)?.position ?? a.position,
+  commitTarget: (a, w) => {
+    const other = nearestOtherAgent(w, a);
+    return other ? { pos: { ...other.position }, targetId: other.id } : null;
+  },
+  durationTicks: ACTION.socialize.durationTicks,
+  effect: { loneliness: SOCIALIZE_LONELINESS_RELIEF },
+  performTick: (state, agent) => {
+    const action = agent.currentAction;
+    if (!action?.targetId) return;
+    const other = getAgent(state, action.targetId);
+    if (!other || !other.alive) return;
+    const relA = ensureRelation(agent, other.id, state.day);
+    const relB = ensureRelation(other, agent.id, state.day);
+    for (const rel of [relA, relB]) {
+      rel.affection = Math.min(100, rel.affection + AFFECTION_GAIN_PER_TICK);
+      rel.trust = Math.min(100, rel.trust + TRUST_GAIN_PER_TICK);
+      rel.lastInteractionDay = state.day;
+    }
+    // The company eases the other's loneliness too.
+    other.needs.loneliness = Math.max(0, other.needs.loneliness + SOCIALIZE_LONELINESS_RELIEF * 0.5);
   },
 };
 
@@ -284,6 +319,7 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
   buildShelter,
   makeFire,
   experiment,
+  socialize,
 };
 export const ACTION_LIST: readonly ActionDef[] = [
   eat,
@@ -295,5 +331,6 @@ export const ACTION_LIST: readonly ActionDef[] = [
   buildShelter,
   makeFire,
   experiment,
+  socialize,
   wander,
 ];

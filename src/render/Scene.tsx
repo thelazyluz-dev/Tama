@@ -8,7 +8,7 @@ import { WORLD_HALF, generateResources } from '../sim';
 import { Terrain } from './Terrain';
 import { Trees } from './Trees';
 import { Ponds } from './Ponds';
-import { Agent } from './Agent';
+import { Agents } from './Agent';
 import { Structures } from './Structures';
 import { Weather } from './Weather';
 import { DayNight } from './DayNight';
@@ -33,7 +33,7 @@ export function Scene(): JSX.Element {
       <Trees resources={resources} terrain={terrain} season={season} />
       <Structures terrain={terrain} />
       <Weather />
-      <Agent />
+      <Agents />
       <CameraRig />
       <OrbitControls
         makeDefault

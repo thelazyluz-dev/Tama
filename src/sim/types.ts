@@ -14,7 +14,7 @@ export type NeedKey =
   | 'boredom'
   | 'safety';
 
-/** Stage-1/2 actions ('experiment' is the stage-2 discovery action). */
+/** Stage-1/2/3 actions ('socialize' is the stage-3 courtship action). */
 export type ActionId =
   | 'eat'
   | 'drink'
@@ -25,7 +25,8 @@ export type ActionId =
   | 'warm'
   | 'buildShelter'
   | 'makeFire'
-  | 'experiment';
+  | 'experiment'
+  | 'socialize';
 
 // --- Stage 2: knowledge ---------------------------------------------------
 /** Heritable personality traits, 0..1 (heritability itself arrives in stage 4). */
@@ -53,6 +54,17 @@ export interface KnowledgeState {
   known: TechId[];
   progress: Record<string, number>; // techId -> accumulated research
   triggers: KnowledgeTriggers;
+}
+
+export type Sex = 'male' | 'female';
+
+/** Stage 3: relationships between agents (SPEC "חיזור וזוגיות"). */
+export type RelationKind = 'stranger' | 'friend' | 'partner' | 'parent' | 'child' | 'sibling';
+export interface Relation {
+  affection: number; // -100..100
+  trust: number; // 0..100
+  kind: RelationKind;
+  lastInteractionDay: number;
 }
 
 export type ResourceType = 'water' | 'fruit';
@@ -129,14 +141,16 @@ export interface JournalEntry {
 export interface Agent {
   id: string;
   name: string;
+  sex: Sex;
+  birthDay: number;
   needs: Record<NeedKey, number>;
   health: number;
   alive: boolean;
   deathCause?: string;
-  /** Stored food the agent lives off (SPEC character economy). */
-  foodStock: number;
   traits: Record<TraitKey, number>;
   skills: Record<SkillKey, number>;
+  /** Relationships to other agents, keyed by agent id. */
+  relations: Record<string, Relation>;
   position: Vec2;
   currentAction: ActiveAction | null;
 }
@@ -147,6 +161,8 @@ export interface Milestones {
   madeFire: boolean;
   firstGather: boolean;
   inCrisis: boolean;
+  nomadArrived: boolean;
+  becamePartners: boolean;
   survivedWinters: number;
   lastSeason: Season;
   lastWeather: Weather;
@@ -163,7 +179,12 @@ export interface WorldState {
   weather: Weather;
   aiProfile: AiProfile;
 
-  agent: Agent;
+  /** All agents; the first is the founder. */
+  agents: Agent[];
+  /** The agent the camera/UI follows. */
+  playerAgentId: string;
+  /** Shared tribe food store (SPEC: the character economy belongs to the world). */
+  foodStock: number;
   structures: Structure[];
   journal: JournalEntry[];
   milestones: Milestones;
@@ -184,7 +205,9 @@ export interface SavedWorld {
   season: Season;
   weather: Weather;
   aiProfile: AiProfile;
-  agent: Agent;
+  agents: Agent[];
+  playerAgentId: string;
+  foodStock: number;
   structures: Structure[];
   resources: ResourceNode[];
   journal: JournalEntry[];

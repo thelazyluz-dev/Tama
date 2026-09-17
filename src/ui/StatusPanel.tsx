@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { useGameStore } from '../store';
 import type { NeedKey } from '../sim';
-import { NEED_KEYS } from '../sim';
+import { NEED_KEYS, playerAgent, partnerOf } from '../sim';
 import {
   NEED_LABEL,
   SEASON_LABEL,
@@ -21,7 +21,12 @@ import {
 export function StatusPanel(): JSX.Element {
   const world = useGameStore((s) => s.world);
   const renameAgent = useGameStore((s) => s.renameAgent);
-  const agent = world.agent;
+  const agent = playerAgent(world);
+
+  // Relationship line: partner, or the nomad the player is getting to know.
+  const partner = partnerOf(world, agent);
+  const other = partner ?? world.agents.find((a) => a.id !== agent.id && a.alive) ?? null;
+  const rel = other ? agent.relations[other.id] : undefined;
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -64,7 +69,7 @@ export function StatusPanel(): JSX.Element {
           {SEASON_EMOJI[world.season]} {SEASON_LABEL[world.season]}
         </span>
         <span className="chip subtle">{WEATHER_LABEL[world.weather]}</span>
-        <span className="chip food">🍎 {Math.round(agent.foodStock)}</span>
+        <span className="chip food">🍎 {Math.round(world.foodStock)}</span>
       </div>
 
       <div className="need-row health-row">
@@ -100,6 +105,15 @@ export function StatusPanel(): JSX.Element {
         <span className="action-label">פעולה</span>
         <span className="action-value">{actionText(agent)}</span>
       </div>
+
+      {other && rel && (
+        <div className="rel-row">
+          <span className="rel-label">{partner ? '❤️ בן/בת זוג' : '🙂 מכר/ה'}</span>
+          <span className="rel-value">
+            {other.name} · חיבה {Math.round(rel.affection)}
+          </span>
+        </div>
+      )}
 
       {world.knowledge.known.length > 0 && (
         <div className="tech-row">

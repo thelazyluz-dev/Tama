@@ -6,7 +6,7 @@
 import { useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { heightAt } from '../sim';
+import { heightAt, playerAgent } from '../sim';
 import { useGameStore } from '../store';
 
 // Minimal shape we rely on from drei's OrbitControls.
@@ -24,7 +24,7 @@ export function CameraRig(): null {
   useFrame((_, rawDelta) => {
     if (!controls) return;
     const { world } = useGameStore.getState();
-    const a = world.agent.position;
+    const a = playerAgent(world).position;
     const y = heightAt(world.terrain, a.x, a.z) + 1;
     goal.current.set(a.x, y, a.z);
 

@@ -197,6 +197,7 @@ export const ACTION = {
   buildShelter: { durationTicks: 60, effect: {} },
   makeFire: { durationTicks: 16, effect: {} },
   experiment: { durationTicks: 14, effect: { boredom: -8 } },
+  socialize: { durationTicks: 12, effect: {} },
   wander: { durationTicks: 12, effect: { boredom: -30 } },
 } as const;
 
@@ -258,3 +259,23 @@ export const LIGHTNING_CHANCE_PER_STORM_DAY = 0.45;
 // Tech effects.
 export const STONE_TOOLS_GATHER_MULT = 1.5; // gather yield once known
 export const COOKING_HUNGER_MULT = 1.45; // cooked food is more filling
+
+// ---------------------------------------------------------------------------
+// Stage 3 — the second (nomad, relationships, courtship)
+// ---------------------------------------------------------------------------
+// A nomad of the opposite sex passes through once the founder has survived and
+// built shelter (SPEC preferred solution to "the lone-agent problem").
+export const NOMAD_MIN_DAY = 20;
+
+// Loneliness: a partner eases it passively; socialising relieves it actively.
+export const LONELINESS_PARTNER_FACTOR = 0.28; // decay multiplier with a partner
+
+// Courtship: affection rises from time spent together, decays when apart, and
+// a partnership forms past the threshold (SPEC "חיזור וזוגיות").
+export const AFFECTION_GAIN_PER_TICK = 0.7;
+export const TRUST_GAIN_PER_TICK = 0.5;
+export const AFFECTION_DECAY_PER_DAY = 2.5;
+export const PARTNER_AFFECTION_THRESHOLD = 70;
+export const SOCIALIZE_APPEAL = 0.7; // scaled by loneliness + sociability
+export const SOCIALIZE_LONELINESS_RELIEF = -15; // per tick while together
+export const ADULT_MIN_AGE_DAYS = 15; // fertile/adult (SPEC childhood table)

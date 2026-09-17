@@ -4,6 +4,7 @@
 
 import { useGameStore } from '../store';
 import type { NeedKey } from '../sim';
+import { playerAgent } from '../sim';
 import { NEED_LABEL, actionText, elapsedText } from './labels';
 
 const NEED_ORDER: NeedKey[] = ['hunger', 'thirst', 'fatigue'];
@@ -14,7 +15,7 @@ export function ReturnScreen(): JSX.Element | null {
   const enterGame = useGameStore((s) => s.enterGame);
 
   if (!catchUp) return null;
-  const agent = world.agent;
+  const agent = playerAgent(world);
 
   return (
     <div className="return-overlay">

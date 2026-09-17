@@ -24,9 +24,11 @@ export interface SaveRecord {
 function isValid(rec: SaveRecord | null): rec is SaveRecord {
   if (!rec || rec.version !== SAVE_VERSION) return false;
   const w = rec.world;
-  if (!w || typeof w.seed !== 'number' || !w.agent) return false;
+  if (!w || typeof w.seed !== 'number' || typeof w.foodStock !== 'number') return false;
+  if (!Array.isArray(w.agents) || w.agents.length === 0 || !w.playerAgentId) return false;
+  const a0 = w.agents[0];
   // Fields added across stages — their absence means an older shape.
-  if (!w.knowledge || !w.agent.traits || !w.agent.skills) return false;
+  if (!w.knowledge || !a0.traits || !a0.skills || !a0.relations) return false;
   if (!Array.isArray(w.structures) || !Array.isArray(w.resources)) return false;
   return true;
 }

@@ -32,19 +32,17 @@ export function hasShelter(state: WorldState): boolean {
   return state.structures.some((s) => s.type === 'shelter');
 }
 
-/** Is the agent currently under the roof of a shelter? */
-export function isSheltered(state: WorldState): boolean {
-  const p = state.agent.position;
+/** Is the given position currently under the roof of a shelter? */
+export function isSheltered(state: WorldState, pos: Vec2): boolean {
   return state.structures.some(
-    (s) => s.type === 'shelter' && dist2(s.position, p) <= SHELTER_RADIUS * SHELTER_RADIUS,
+    (s) => s.type === 'shelter' && dist2(s.position, pos) <= SHELTER_RADIUS * SHELTER_RADIUS,
   );
 }
 
-/** A lit fire (fuel > 0) the agent is standing next to, if any. */
-export function warmFireNear(state: WorldState): Structure | null {
-  const p = state.agent.position;
+/** A lit fire (fuel > 0) next to the given position, if any. */
+export function warmFireNear(state: WorldState, pos: Vec2): Structure | null {
   for (const s of state.structures) {
-    if (s.type === 'fire' && s.fuel > 0 && dist2(s.position, p) <= FIRE_RADIUS * FIRE_RADIUS) {
+    if (s.type === 'fire' && s.fuel > 0 && dist2(s.position, pos) <= FIRE_RADIUS * FIRE_RADIUS) {
       return s;
     }
   }
