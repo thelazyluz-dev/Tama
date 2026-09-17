@@ -19,6 +19,7 @@ export { applyNeedDecay, efficiency, warmthDecayPerDay, safetyDeltaPerDay } from
 export { updateHealth } from './health';
 export type { HealthResult } from './health';
 export { playerAgent, partnerOf, nearestOtherAgent, getAgent, livingAgents } from './agents';
+export { ageDays, isAdult, isChild } from './genetics';
 export {
   TECHS,
   TECH_LIST,

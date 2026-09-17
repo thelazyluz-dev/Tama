@@ -138,11 +138,20 @@ export interface JournalEntry {
   text: string; // Hebrew, generated from a template + state
 }
 
+export interface Pregnancy {
+  conceivedDay: number;
+  fatherId: string;
+}
+
 export interface Agent {
   id: string;
   name: string;
   sex: Sex;
   birthDay: number;
+  /** Generation depth: founder/nomad = 0, their children = 1, ... */
+  generation: number;
+  /** Parent ids [mother, father], for the family tree. */
+  parents?: [string, string];
   needs: Record<NeedKey, number>;
   health: number;
   alive: boolean;
@@ -151,6 +160,7 @@ export interface Agent {
   skills: Record<SkillKey, number>;
   /** Relationships to other agents, keyed by agent id. */
   relations: Record<string, Relation>;
+  pregnancy?: Pregnancy;
   position: Vec2;
   currentAction: ActiveAction | null;
 }
@@ -163,6 +173,9 @@ export interface Milestones {
   inCrisis: boolean;
   nomadArrived: boolean;
   becamePartners: boolean;
+  firstBirth: boolean;
+  generations: number; // deepest generation reached
+  lastNomadDay: number;
   survivedWinters: number;
   lastSeason: Season;
   lastWeather: Weather;
@@ -179,10 +192,12 @@ export interface WorldState {
   weather: Weather;
   aiProfile: AiProfile;
 
-  /** All agents; the first is the founder. */
+  /** All agents (living and dead); the first is the founder. */
   agents: Agent[];
   /** The agent the camera/UI follows. */
   playerAgentId: string;
+  /** Monotonic counter for unique agent ids. */
+  nextAgentId: number;
   /** Shared tribe food store (SPEC: the character economy belongs to the world). */
   foodStock: number;
   structures: Structure[];
@@ -207,6 +222,7 @@ export interface SavedWorld {
   aiProfile: AiProfile;
   agents: Agent[];
   playerAgentId: string;
+  nextAgentId: number;
   foodStock: number;
   structures: Structure[];
   resources: ResourceNode[];

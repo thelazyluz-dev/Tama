@@ -20,7 +20,15 @@ import { deriveSeason, rollWeather, wintersElapsed } from './season';
 import { applyNeedDecay, clampNeeds } from './needs';
 import { updateHealth } from './health';
 import { burnFires } from './structures';
-import { playerAgent } from './agents';
+import { playerAgent, partnerOf } from './agents';
+import {
+  ageDays,
+  isAdult,
+  isFertile,
+  inTeachingWindow,
+  oldAgeDeathChance,
+  inheritTraits,
+} from './genetics';
 import { ACTIONS } from './actions';
 import { decide } from './utility';
 import {
@@ -34,6 +42,9 @@ import {
   pushLightning,
   pushNomad,
   pushPartners,
+  pushBirth,
+  pushHandoff,
+  pushKnowledgeLoss,
 } from './events';
 import {
   NEED_KEYS,
@@ -46,6 +57,13 @@ import {
   ADULT_MIN_AGE_DAYS,
   PARTNER_AFFECTION_THRESHOLD,
   AFFECTION_DECAY_PER_DAY,
+  PREGNANCY_DAYS,
+  CONCEPTION_CHANCE_PER_DAY,
+  POP_SOFT_CAP,
+  BIRTH_RISK,
+  SKILL_TEACH_PER_TICK,
+  TEACHING_AGE_MIN,
+  NOMAD_COOLDOWN_DAYS,
   TICKS_PER_DAY,
   TICKS_PER_HOUR,
   MOVE_SPEED,
@@ -61,6 +79,7 @@ interface SpawnOpts {
   name: string;
   sex: Sex;
   birthDay: number;
+  generation: number;
   position: { x: number; z: number };
   rng: Rng;
 }
@@ -71,6 +90,7 @@ function spawnAgent(o: SpawnOpts): Agent {
     name: o.name,
     sex: o.sex,
     birthDay: o.birthDay,
+    generation: o.generation,
     needs: { ...NEED_START },
     health: HEALTH_START,
     alive: true,
@@ -100,6 +120,7 @@ export function createWorld(seed: number, aiProfile: AiProfile = 'sensible'): Wo
     name: nameRng.pick(FEMALE_NAMES),
     sex: 'female',
     birthDay: 0,
+    generation: 0,
     position: { x: 0, z: 0 },
     rng: traitRng,
   });
@@ -116,6 +137,7 @@ export function createWorld(seed: number, aiProfile: AiProfile = 'sensible'): Wo
     aiProfile,
     agents: [founder],
     playerAgentId: founder.id,
+    nextAgentId: 1,
     foodStock: 0,
     structures: [],
     journal: [],
@@ -126,6 +148,9 @@ export function createWorld(seed: number, aiProfile: AiProfile = 'sensible'): Wo
       inCrisis: false,
       nomadArrived: false,
       becamePartners: false,
+      firstBirth: false,
+      generations: 0,
+      lastNomadDay: -999,
       survivedWinters: 0,
       lastSeason: season,
       lastWeather: 'clear',
@@ -182,7 +207,8 @@ function tickOnce(state: WorldState, rng: Rng): void {
 
     regrowResources(state.resources, state.season);
     state.milestones.survivedWinters = wintersElapsed(state.day);
-    maybeSpawnNomad(state);
+    ageAndReproduce(state, rng);
+    maybeSpawnMate(state, rng);
     decayRelationships(state);
     pushDaySummary(state, voice, rng);
   }
@@ -223,10 +249,43 @@ function tickOnce(state: WorldState, rng: Rng): void {
 
     moveAndPerform(state, agent);
     clampNeeds(agent);
+    teachChild(state, agent);
   }
 
-  // 5. Relationships may tip into partnership.
+  // 5. Relationships may tip into partnership; the watched life may pass on.
   promoteRelationships(state);
+  handleControlHandoff(state);
+}
+
+/** A child in the teaching window near a living parent picks up skills. */
+function teachChild(state: WorldState, child: Agent): void {
+  if (!inTeachingWindow(child, state.day) || !child.parents) return;
+  const parentAlive = child.parents.some((pid) => {
+    const p = state.agents.find((a) => a.id === pid);
+    return p?.alive;
+  });
+  if (!parentAlive) return;
+  for (const key of ['foraging', 'crafting', 'firecraft'] as const) {
+    child.skills[key] = Math.min(100, child.skills[key] + SKILL_TEACH_PER_TICK);
+  }
+}
+
+/** If the watched agent has died, the camera passes to an heir. */
+function handleControlHandoff(state: WorldState): void {
+  const current = state.agents.find((a) => a.id === state.playerAgentId);
+  if (current?.alive) return;
+  // Prefer a living adult descendant, then any living adult, then anyone alive.
+  const living = state.agents.filter((a) => a.alive);
+  if (living.length === 0) return;
+  const adults = living.filter((a) => isAdult(a, state.day));
+  const heir =
+    adults.find((a) => a.generation > (current?.generation ?? 0)) ??
+    adults[0] ??
+    living[0]!;
+  if (heir.id !== state.playerAgentId) {
+    state.playerAgentId = heir.id;
+    pushHandoff(state, heir);
+  }
 }
 
 function moveAndPerform(state: WorldState, agent: Agent): void {
@@ -273,25 +332,141 @@ function moveAndPerform(state: WorldState, agent: Agent): void {
   }
 }
 
-/** Spawn a nomad once the founder has survived and built shelter (SPEC "נווד"). */
-function maybeSpawnNomad(state: WorldState): void {
-  if (state.milestones.nomadArrived || state.agents.length >= 2) return;
-  if (state.day < NOMAD_MIN_DAY || !state.milestones.builtShelter) return;
+function nextId(state: WorldState): string {
+  const id = `a${state.nextAgentId}`;
+  state.nextAgentId += 1;
+  return id;
+}
 
-  const rng = new Rng(deriveSeed(state.seed, 'nomad'));
-  const founder = state.agents[0]!;
-  const nomadSex: Sex = founder.sex === 'female' ? 'male' : 'female';
-  const names = nomadSex === 'male' ? MALE_NAMES : FEMALE_NAMES;
-  const nomad = spawnAgent({
-    id: 'a1',
+/** Parent-child or siblings (shared parent) — blocks incestuous partnering. */
+function areKin(a: Agent, b: Agent): boolean {
+  if (a.parents?.includes(b.id) || b.parents?.includes(a.id)) return true;
+  if (a.parents && b.parents) {
+    for (const p of a.parents) if (b.parents.includes(p)) return true;
+  }
+  return false;
+}
+
+/** Old-age deaths, conceptions, and births — once per day. */
+function ageAndReproduce(state: WorldState, rng: Rng): void {
+  // Old age.
+  for (const agent of state.agents) {
+    if (!agent.alive) continue;
+    if (rng.next() < oldAgeDeathChance(ageDays(agent, state.day))) {
+      agent.alive = false;
+      agent.deathCause = 'זקנה';
+      agent.currentAction = null;
+      pushDeath(state, agent);
+      mournOrphans(state, agent);
+    }
+  }
+
+  // Pregnancy & birth. Iterate a snapshot so newborns aren't processed twice.
+  for (const mother of [...state.agents]) {
+    if (!mother.alive || mother.sex !== 'female') continue;
+    if (mother.pregnancy) {
+      if (state.day - mother.pregnancy.conceivedDay >= PREGNANCY_DAYS) {
+        giveBirth(state, mother, rng);
+      }
+      continue;
+    }
+    if (!isFertile(mother, state.day)) continue;
+    const partner = partnerOf(state, mother);
+    if (!partner || partner.sex !== 'male' || !isFertile(partner, state.day)) continue;
+    const living = state.agents.reduce((n, a) => n + (a.alive ? 1 : 0), 0);
+    // Fertility tapers toward the soft cap (prevents unbounded growth).
+    const crowd = Math.max(0, 1 - living / POP_SOFT_CAP);
+    if (rng.next() < CONCEPTION_CHANCE_PER_DAY * crowd) {
+      mother.pregnancy = { conceivedDay: state.day, fatherId: partner.id };
+    }
+  }
+}
+
+function giveBirth(state: WorldState, mother: Agent, rng: Rng): void {
+  const father = state.agents.find((a) => a.id === mother.pregnancy?.fatherId);
+  mother.pregnancy = undefined;
+  if (!father) return;
+
+  const sex: Sex = rng.next() < 0.5 ? 'female' : 'male';
+  const names = sex === 'female' ? FEMALE_NAMES : MALE_NAMES;
+  const generation = Math.max(mother.generation, father.generation) + 1;
+  const child = spawnAgent({
+    id: nextId(state),
     name: rng.pick(names),
-    sex: nomadSex,
-    birthDay: state.day - (ADULT_MIN_AGE_DAYS + 12), // already an adult
-    position: { x: -(WORLD_HALF - 3), z: rng.range(-8, 8) },
+    sex,
+    birthDay: state.day,
+    generation,
+    position: { x: mother.position.x, z: mother.position.z },
     rng,
   });
+  child.traits = inheritTraits(mother, father, rng); // inherited, not random
+  child.parents = [mother.id, father.id];
+  const day = state.day;
+  child.relations[mother.id] = { affection: 60, trust: 60, kind: 'parent', lastInteractionDay: day };
+  child.relations[father.id] = { affection: 60, trust: 60, kind: 'parent', lastInteractionDay: day };
+  mother.relations[child.id] = { affection: 75, trust: 75, kind: 'child', lastInteractionDay: day };
+  father.relations[child.id] = { affection: 70, trust: 70, kind: 'child', lastInteractionDay: day };
+
+  state.agents.push(child);
+  state.milestones.firstBirth = true;
+  state.milestones.generations = Math.max(state.milestones.generations, generation);
+  pushBirth(state, child, mother, father);
+
+  // Rare maternal mortality (SPEC).
+  if (rng.next() < BIRTH_RISK) {
+    mother.alive = false;
+    mother.deathCause = 'לידה';
+    mother.currentAction = null;
+    pushDeath(state, mother);
+    mournOrphans(state, mother);
+  }
+}
+
+/** A young child losing a parent loses part of the passed-down knowledge. */
+function mournOrphans(state: WorldState, dead: Agent): void {
+  for (const child of state.agents) {
+    if (!child.alive || !child.parents?.includes(dead.id)) continue;
+    if (ageDays(child, state.day) < TEACHING_AGE_MIN) {
+      pushKnowledgeLoss(state, child, dead);
+    }
+  }
+}
+
+/**
+ * A wandering mate arrives when a lone fertile adult has no eligible (non-kin,
+ * opposite-sex) partner in the tribe. Generalises the SPEC nomad across
+ * generations so lineages can continue.
+ */
+function maybeSpawnMate(state: WorldState, _rng: Rng): void {
+  const singles = state.agents.filter(
+    (a) => a.alive && isFertile(a, state.day) && !partnerOf(state, a),
+  );
+  if (singles.length === 0) return;
+
+  const viable = singles.some((a) =>
+    singles.some((b) => a !== b && a.sex !== b.sex && !areKin(a, b)),
+  );
+  if (viable) return;
+
+  if (state.day < NOMAD_MIN_DAY || !state.milestones.builtShelter) return;
+  if (state.day - state.milestones.lastNomadDay < NOMAD_COOLDOWN_DAYS) return;
+
+  const nrng = new Rng(deriveSeed(state.seed, `nomad-${state.day}`));
+  const target = singles[0]!;
+  const nomadSex: Sex = target.sex === 'female' ? 'male' : 'female';
+  const names = nomadSex === 'male' ? MALE_NAMES : FEMALE_NAMES;
+  const nomad = spawnAgent({
+    id: nextId(state),
+    name: nrng.pick(names),
+    sex: nomadSex,
+    birthDay: state.day - (ADULT_MIN_AGE_DAYS + nrng.int(2, 12)),
+    generation: 0,
+    position: { x: -(WORLD_HALF - 3), z: nrng.range(-8, 8) },
+    rng: nrng,
+  });
   state.agents.push(nomad);
-  state.milestones.nomadArrived = true;
+  state.milestones.lastNomadDay = state.day;
+  if (!state.milestones.nomadArrived) state.milestones.nomadArrived = true;
   pushNomad(state, nomad);
 }
 
@@ -316,7 +491,7 @@ function promoteRelationships(state: WorldState): void {
       const b = living[j]!;
       const relA = a.relations[b.id];
       const relB = b.relations[a.id];
-      if (!relA || !relB || relA.kind === 'partner') continue;
+      if (!relA || !relB || relA.kind === 'partner' || areKin(a, b)) continue;
       const adultA = state.day - a.birthDay >= ADULT_MIN_AGE_DAYS;
       const adultB = state.day - b.birthDay >= ADULT_MIN_AGE_DAYS;
       if (
@@ -349,6 +524,7 @@ export function toSaved(state: WorldState): SavedWorld {
     aiProfile: state.aiProfile,
     agents: state.agents.map(cloneAgent),
     playerAgentId: state.playerAgentId,
+    nextAgentId: state.nextAgentId,
     foodStock: state.foodStock,
     structures: state.structures.map(cloneStructure),
     resources: state.resources.map(cloneResource),
@@ -371,6 +547,7 @@ export function hydrate(saved: SavedWorld): WorldState {
     aiProfile: saved.aiProfile,
     agents: saved.agents.map(cloneAgent),
     playerAgentId: saved.playerAgentId,
+    nextAgentId: saved.nextAgentId,
     foodStock: saved.foodStock,
     structures: saved.structures.map(cloneStructure),
     resources: saved.resources.map(cloneResource),
@@ -394,6 +571,7 @@ function cloneAgent(a: Agent): Agent {
     name: a.name,
     sex: a.sex,
     birthDay: a.birthDay,
+    generation: a.generation,
     needs: { ...a.needs },
     health: a.health,
     alive: a.alive,
@@ -404,6 +582,8 @@ function cloneAgent(a: Agent): Agent {
     currentAction: action ? { ...action, targetPos: { ...action.targetPos } } : null,
   };
   if (a.deathCause !== undefined) cloned.deathCause = a.deathCause;
+  if (a.parents) cloned.parents = [a.parents[0], a.parents[1]];
+  if (a.pregnancy) cloned.pregnancy = { ...a.pregnancy };
   return cloned;
 }
 
@@ -431,6 +611,7 @@ function cloneState(s: WorldState): WorldState {
     aiProfile: s.aiProfile,
     agents: s.agents.map(cloneAgent),
     playerAgentId: s.playerAgentId,
+    nextAgentId: s.nextAgentId,
     foodStock: s.foodStock,
     structures: s.structures.map(cloneStructure),
     resources: s.resources.map(cloneResource),

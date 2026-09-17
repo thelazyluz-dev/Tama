@@ -122,6 +122,8 @@ const DEATH_PHRASE: Record<string, string> = {
   צמא: 'הצמא הכריע.',
   מחלה: 'המחלה גברה.',
   תשישות: 'הגוף פשוט כבה.',
+  זקנה: 'הזקנה עשתה את שלה. חיים מלאים.',
+  לידה: 'סיבוכי לידה. אבל הרך נולד.',
 };
 
 const DISCOVERY_LINES: Record<TechId, string> = {
@@ -162,4 +164,25 @@ export function pushNomad(state: WorldState, nomad: Agent): void {
 /** Two agents became a couple (SPEC "זוגיות"). */
 export function pushPartners(state: WorldState, a: Agent, b: Agent): void {
   add(state, 'social', 3, `${a.name} ו${b.name} נעשו זוג. העמק כבר לא כל כך בודד.`);
+}
+
+/** A child was born (weight 3 — a new generation). */
+export function pushBirth(state: WorldState, child: Agent, mother: Agent, father: Agent): void {
+  const born = child.sex === 'female' ? 'נולדה' : 'נולד';
+  add(
+    state,
+    'birth',
+    3,
+    `${born} ${child.name} ל${mother.name} ו${father.name} — הדור ה־${child.generation}.`,
+  );
+}
+
+/** A child lost part of the knowledge because a parent died too soon. */
+export function pushKnowledgeLoss(state: WorldState, child: Agent, parent: Agent): void {
+  add(state, 'mood', 2, `${parent.name} מת/ה לפני ש${child.name} למד/ה הכל. חלק מהידע אבד.`);
+}
+
+/** The watched life passes to an heir (SPEC "מעבר שליטה"). */
+export function pushHandoff(state: WorldState, heir: Agent): void {
+  add(state, 'mood', 3, `העדשה עוברת אל ${heir.name}. השושלת ממשיכה.`);
 }

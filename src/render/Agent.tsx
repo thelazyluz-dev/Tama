@@ -7,7 +7,7 @@ import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
-import { heightAt, getAgent } from '../sim';
+import { heightAt, getAgent, ADULT_MIN_AGE_DAYS } from '../sim';
 import { useGameStore } from '../store';
 import { ACTION_COLOR, ACTION_BUBBLE } from './palette';
 
@@ -71,6 +71,12 @@ function AgentFigure({ agentId, isPlayer }: { agentId: string; isPlayer: boolean
     prev.current.z = g.position.z;
     const speed = Math.hypot(dx, dz) / dt;
     const walking = speed > 0.35;
+
+    // Children are smaller, growing to full size at adulthood.
+    const age = world.day - agent.birthDay;
+    const targetScale = 0.5 + 0.5 * Math.min(1, Math.max(0, age / ADULT_MIN_AGE_DAYS));
+    const s = g.scale.x + (targetScale - g.scale.x) * (1 - Math.exp(-4 * dt));
+    g.scale.setScalar(s);
 
     if (walking) {
       const heading = Math.atan2(dx, dz);
@@ -191,8 +197,10 @@ function AgentFigure({ agentId, isPlayer }: { agentId: string; isPlayer: boolean
 }
 
 export function Agents(): JSX.Element {
-  // Re-renders only when the roster changes, not every tick.
-  const ids = useGameStore((s) => s.world.agents.map((a) => a.id).join('|'));
+  // Only living agents are drawn; re-renders when the living roster changes.
+  const ids = useGameStore((s) =>
+    s.world.agents.filter((a) => a.alive).map((a) => a.id).join('|'),
+  );
   const playerId = useGameStore((s) => s.world.playerAgentId);
   const list = ids ? ids.split('|') : [];
   return (

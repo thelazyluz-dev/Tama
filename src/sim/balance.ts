@@ -279,3 +279,31 @@ export const PARTNER_AFFECTION_THRESHOLD = 70;
 export const SOCIALIZE_APPEAL = 0.7; // scaled by loneliness + sociability
 export const SOCIALIZE_LONELINESS_RELIEF = -15; // per tick while together
 export const ADULT_MIN_AGE_DAYS = 15; // fertile/adult (SPEC childhood table)
+
+// ---------------------------------------------------------------------------
+// Stage 4 — generations. Lifespans are COMPRESSED (game days, not the SPEC's
+// realistic years) so a valley turns over generations in a playable span:
+// with offline time (1 real min = 1 game hour) a night away advances one.
+// ---------------------------------------------------------------------------
+export const CHILD_HELPER_AGE_DAYS = 9; // may gather/help (SPEC 9-14)
+export const TEACHING_AGE_MIN = 9;
+export const TEACHING_AGE_MAX = 14;
+export const SKILL_TEACH_PER_TICK = 0.12; // a child near a parent learns
+
+export const FERTILE_MIN_AGE_DAYS = ADULT_MIN_AGE_DAYS;
+export const FERTILE_MAX_AGE_DAYS = 45;
+export const PREGNANCY_DAYS = 8;
+export const CONCEPTION_CHANCE_PER_DAY = 0.42; // partners, fertile
+export const BIRTH_RISK = 0.02; // maternal mortality
+// Self-regulating population: fertility scales toward zero as the living tribe
+// nears this size — prevents both extinction and unbounded growth (SPEC caps
+// the object budget ~20).
+export const POP_SOFT_CAP = 12;
+export const TRAIT_MUTATION = 0.15; // ±15% (SPEC)
+
+export const OLD_AGE_START_DAYS = 46; // death chance begins to ramp
+export const MAX_AGE_DAYS = 64; // near-certain death by here
+
+// A wandering nomad arrives when a lone unpartnered adult has no eligible mate
+// in the tribe, no more than once per this many days (keeps lineages going).
+export const NOMAD_COOLDOWN_DAYS = 12;

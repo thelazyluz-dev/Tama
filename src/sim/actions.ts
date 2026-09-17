@@ -12,6 +12,7 @@ import { nearestResource } from './resources';
 import { nearestStructure, hasShelter, anyLitFire } from './structures';
 import { efficiency } from './needs';
 import { nearestOtherAgent, getAgent, ensureRelation } from './agents';
+import { isAdult, canHelp } from './genetics';
 import {
   fireKnown,
   gatherMultiplier,
@@ -178,7 +179,9 @@ const gather: ActionDef = {
     return proactive * seasonMult + reactive;
   },
   feasibility: (a, w) =>
-    w.season !== 'winter' && nearestResource(w.resources, 'fruit', a.position, true) ? 1 : 0,
+    w.season !== 'winter' && canHelp(a, w.day) && nearestResource(w.resources, 'fruit', a.position, true)
+      ? 1
+      : 0,
   scoringTarget: (a, w) =>
     nearestResource(w.resources, 'fruit', a.position, true)?.position ?? a.position,
   commitTarget: (a, w) => {
@@ -207,7 +210,7 @@ const buildShelter: ActionDef = {
     const coldNudge = 1 + sq(a.needs.warmth / 100);
     return BUILD_SHELTER_APPEAL * prepBonus(w) * coldNudge;
   },
-  feasibility: (_a, w) => (hasShelter(w) ? 0 : 1),
+  feasibility: (a, w) => (!hasShelter(w) && isAdult(a, w.day) ? 1 : 0),
   scoringTarget: (a) => a.position,
   commitTarget: (a) => ({ pos: { ...a.position } }),
   durationTicks: ACTION.buildShelter.durationTicks,
@@ -230,7 +233,7 @@ const makeFire: ActionDef = {
     const cold = 0.4 + sq(a.needs.warmth / 100);
     return MAKE_FIRE_APPEAL * prepBonus(w) * cold * supplied;
   },
-  feasibility: (_a, w) => (fireKnown(w) ? 1 : 0),
+  feasibility: (a, w) => (fireKnown(w) && isAdult(a, w.day) ? 1 : 0),
   scoringTarget: (a) => a.position,
   commitTarget: (a, w) => ({ pos: campSpot(w, a) }),
   durationTicks: ACTION.makeFire.durationTicks,
@@ -257,11 +260,11 @@ const makeFire: ActionDef = {
 const experiment: ActionDef = {
   id: 'experiment',
   appeal: (a, w) => {
-    if (isReactive(w) || !hasDiscoverable(w)) return 0;
+    if (isReactive(w) || !hasDiscoverable(w) || !isAdult(a, w.day)) return 0;
     const met = comfortableForResearch(w, a) ? 1 : 0.1;
     return a.traits.curiosity * met * EXPERIMENT_APPEAL;
   },
-  feasibility: (_a, w) => (hasDiscoverable(w) ? 1 : 0),
+  feasibility: (a, w) => (hasDiscoverable(w) && isAdult(a, w.day) ? 1 : 0),
   scoringTarget: (a) => a.position,
   commitTarget: (a) => ({ pos: { ...a.position } }),
   durationTicks: ACTION.experiment.durationTicks,
