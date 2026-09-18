@@ -34,7 +34,7 @@ export { ACTIONS, ACTION_LIST } from './actions';
 export type { ActionDef, ResolvedTarget } from './actions';
 export { scoreAction, decide, tornChoice } from './utility';
 export type { Decision } from './utility';
-export { SHOP_ITEMS, applyIntervention, clampPriority, crisisActive } from './player';
+export { SHOP_ITEMS, applyIntervention, clampPriority, crisisActive, petAgent } from './player';
 export type { ShopItem, InterventionId } from './player';
 export { MAX_JOURNAL } from './events';
 export { createWorld, tick, toSaved, hydrate } from './world';

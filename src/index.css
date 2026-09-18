@@ -676,6 +676,28 @@ body {
   transform: translateY(1px);
 }
 
+/* ---- Pet hearts (direct-touch care) ---- */
+.pet-hearts {
+  position: relative;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+.pet-hearts span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 20px;
+  transform: translateX(var(--dx, 0));
+  animation: heart-float 1s ease-out forwards;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+}
+@keyframes heart-float {
+  0% { opacity: 0; transform: translate(var(--dx, 0), 4px) scale(0.5); }
+  25% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx, 0), -46px) scale(1.15); }
+}
+
 /* ---- Player journal line (stage 5: the player's own hand in the story) ---- */
 .journal-entry.j-player .journal-text {
   color: #c9a6ff;

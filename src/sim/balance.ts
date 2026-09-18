@@ -278,6 +278,14 @@ export const SCHOOL_TEACH_MULT = 2.6; // multiplies SKILL_TEACH_PER_TICK
 export const SCHOOL_START_SKILL = 26; // a newborn's baseline skill once schooling exists
 
 // ---------------------------------------------------------------------------
+// Direct touch (Tamagotchi care): tapping a creature pets it — pure affection,
+// easing loneliness and boredom. It never touches survival needs (hunger/etc.),
+// so it can't break the survival economy; it's connection, not a cheat.
+// ---------------------------------------------------------------------------
+export const PET_LONELINESS_RELIEF = 30;
+export const PET_BOREDOM_RELIEF = 24;
+
+// ---------------------------------------------------------------------------
 // Stage 3 — the second (nomad, relationships, courtship)
 // ---------------------------------------------------------------------------
 // A nomad of the opposite sex passes through once the founder has survived and

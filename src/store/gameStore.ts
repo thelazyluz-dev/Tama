@@ -14,6 +14,7 @@ import {
   SPEED_STEPS,
   applyIntervention,
   clampPriority,
+  petAgent as applyPet,
 } from '../sim';
 import { saveGame, loadGame, clearGame } from './persistence';
 
@@ -47,6 +48,8 @@ export interface GameStore {
   setPriority: (category: PriorityCategory, value: number) => void;
   /** Stage 5: spend points on a shop intervention. Returns whether it applied. */
   buyIntervention: (id: InterventionId) => boolean;
+  /** Direct touch: pet a creature (eases loneliness & boredom). */
+  petAgent: (id: string) => void;
 }
 
 interface Boot {
@@ -156,5 +159,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({ world: draft });
     }
     return ok;
+  },
+
+  petAgent: (id) => {
+    const draft = tick(get().world, 0); // deep clone; pet mutates only that
+    if (applyPet(draft, id)) {
+      saveGame(toSaved(draft), Date.now());
+      set({ world: draft });
+    }
   },
 }));

@@ -11,9 +11,9 @@
 
 import type { WorldState, Agent, PriorityCategory } from './types';
 import { availableTechs, fireKnown } from './knowledge';
-import { playerAgent, livingAgents } from './agents';
+import { playerAgent, livingAgents, getAgent } from './agents';
 import { newcomerCandidate, summonNewcomer } from './world';
-import { pushSpark, pushInspiration, pushMedicine } from './events';
+import { pushSpark, pushInspiration, pushMedicine, pushPet } from './events';
 import {
   PRIORITY_MIN,
   PRIORITY_MAX,
@@ -25,6 +25,8 @@ import {
   MEDICINE_HEAL,
   HEALTH_START,
   CRISIS_HEALTH,
+  PET_LONELINESS_RELIEF,
+  PET_BOREDOM_RELIEF,
 } from './balance';
 
 export type InterventionId = 'spark' | 'inspiration' | 'newcomer' | 'medicine';
@@ -120,6 +122,22 @@ export function applyIntervention(state: WorldState, id: InterventionId): boolea
   }
 
   state.playerPoints -= item.cost;
+  return true;
+}
+
+/**
+ * Direct touch: pet a creature (Tamagotchi care). Eases loneliness and boredom
+ * only — never survival needs — so it deepens the bond without cheating the
+ * survival loop. Writes a journal line when it lifts a creature that was low.
+ * Mutates the passed state (the store clones first). Returns false if no-op.
+ */
+export function petAgent(state: WorldState, id: string): boolean {
+  const a = getAgent(state, id);
+  if (!a || !a.alive) return false;
+  const wasLow = a.needs.loneliness > 45 || a.needs.boredom > 55;
+  a.needs.loneliness = Math.max(0, a.needs.loneliness - PET_LONELINESS_RELIEF);
+  a.needs.boredom = Math.max(0, a.needs.boredom - PET_BOREDOM_RELIEF);
+  if (wasLow) pushPet(state, a);
   return true;
 }
 

@@ -206,3 +206,8 @@ export function pushInspiration(state: WorldState, agent: Agent): void {
 export function pushMedicine(state: WorldState, agent: Agent): void {
   add(state, 'player', 3, `${agent.name} — כוחות חדשים נמזגו ברגע האחרון. הבריאות חוזרת.`);
 }
+
+export function pushPet(state: WorldState, agent: Agent): void {
+  const she = agent.sex === 'female' ? 'נהנתה' : 'נהנה';
+  add(state, 'player', 2, `${agent.name} — קיבל/ה ליטוף. ${she} מהמגע, הבדידות התפוגגה מעט.`);
+}

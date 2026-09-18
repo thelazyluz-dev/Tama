@@ -6,8 +6,10 @@
 // hungry, cold, sleepy, sick, content, happy — the thing that makes you care.
 // Read-only: it renders sim state, never writes it.
 
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { useFrame } from '@react-three/fiber';
+import type { ThreeEvent } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { heightAt, getAgent, ADULT_MIN_AGE_DAYS } from '../sim';
@@ -106,6 +108,8 @@ function AgentFigure({ agentId, isPlayer }: { agentId: string; isPlayer: boolean
   const prev = useRef({ x: 0, z: 0, init: false });
   const phase = useRef(0);
   const tintTarget = useRef(new THREE.Color());
+  const petStart = useRef(-999); // performance.now() of the last pet, for the bounce
+  const [hearts, setHearts] = useState<number[]>([]);
 
   // Identity is stable per agent (from inherited traits) — computed once.
   const id = useMemo(() => {
@@ -195,6 +199,12 @@ function AgentFigure({ agentId, isPlayer }: { agentId: string; isPlayer: boolean
       r.position.y += (bob - r.position.y) * poseEase;
     }
 
+    // A happy hop right after being petted.
+    const petAge = (performance.now() - petStart.current) / 1000;
+    if (petAge >= 0 && petAge < 0.55) {
+      r.position.y += Math.sin((petAge / 0.55) * Math.PI) * 0.3;
+    }
+
     // --- expression -------------------------------------------------------
     const mood = agent.alive ? moodOf(agent) : 'content';
     const smiling = mood === 'happy' || mood === 'content';
@@ -221,9 +231,28 @@ function AgentFigure({ agentId, isPlayer }: { agentId: string; isPlayer: boolean
     }
   });
 
+  const pet = (e: ThreeEvent<MouseEvent>): void => {
+    e.stopPropagation();
+    useGameStore.getState().petAgent(agentId);
+    petStart.current = performance.now();
+    const base = Date.now();
+    const ids = [base, base + 1, base + 2];
+    setHearts((h) => [...h, ...ids]);
+    window.setTimeout(() => setHearts((h) => h.filter((x) => !ids.includes(x))), 1100);
+  };
+  const hoverOn = (e: ThreeEvent<PointerEvent>): void => {
+    e.stopPropagation();
+    document.body.style.cursor = 'pointer';
+  };
+  const hoverOff = (): void => {
+    document.body.style.cursor = '';
+  };
+
   const ringColor = isPlayer ? '#bfe3ff' : '#ffd39b';
   if (!id) return <group ref={group} />;
   const es = id.eyeSize;
+  const legColor = id.base.clone().lerp(new THREE.Color(0, 0, 0), 0.12).getStyle();
+  const footColor = id.base.clone().lerp(new THREE.Color(0, 0, 0), 0.2).getStyle();
 
   const eye = (side: number): JSX.Element => (
     <group position={[side * id.eyeSep, 0, 0]}>
@@ -253,18 +282,26 @@ function AgentFigure({ agentId, isPlayer }: { agentId: string; isPlayer: boolean
         <meshBasicMaterial color={ringColor} transparent opacity={0.45} depthWrite={false} side={THREE.DoubleSide} />
       </mesh>
 
-      <group ref={rig}>
-        {/* legs */}
-        <group ref={legL} position={[0.2, 0.5, 0.02]}>
-          <mesh position={[0, -0.2, 0]} castShadow>
-            <capsuleGeometry args={[0.15, 0.16, 6, 12]} />
-            <meshStandardMaterial color={id.base.clone().lerp(new THREE.Color(0, 0, 0), 0.12).getStyle()} roughness={0.75} />
+      <group ref={rig} onClick={pet} onPointerOver={hoverOn} onPointerOut={hoverOff}>
+        {/* legs + little feet that peek out below the round body */}
+        <group ref={legL} position={[0.24, 0.52, 0.1]}>
+          <mesh position={[0, -0.18, 0]} castShadow>
+            <capsuleGeometry args={[0.12, 0.14, 6, 12]} />
+            <meshStandardMaterial color={legColor} roughness={0.75} />
+          </mesh>
+          <mesh position={[0, -0.34, 0.05]} scale={[1, 0.7, 1.3]} castShadow>
+            <sphereGeometry args={[0.15, 12, 12]} />
+            <meshStandardMaterial color={footColor} roughness={0.7} />
           </mesh>
         </group>
-        <group ref={legR} position={[-0.2, 0.5, 0.02]}>
-          <mesh position={[0, -0.2, 0]} castShadow>
-            <capsuleGeometry args={[0.15, 0.16, 6, 12]} />
-            <meshStandardMaterial color={id.base.clone().lerp(new THREE.Color(0, 0, 0), 0.12).getStyle()} roughness={0.75} />
+        <group ref={legR} position={[-0.24, 0.52, 0.1]}>
+          <mesh position={[0, -0.18, 0]} castShadow>
+            <capsuleGeometry args={[0.12, 0.14, 6, 12]} />
+            <meshStandardMaterial color={legColor} roughness={0.75} />
+          </mesh>
+          <mesh position={[0, -0.34, 0.05]} scale={[1, 0.7, 1.3]} castShadow>
+            <sphereGeometry args={[0.15, 12, 12]} />
+            <meshStandardMaterial color={footColor} roughness={0.7} />
           </mesh>
         </group>
 
@@ -334,6 +371,18 @@ function AgentFigure({ agentId, isPlayer }: { agentId: string; isPlayer: boolean
           </group>
         </group>
       </group>
+
+      {hearts.length > 0 && (
+        <Html position={[0, 1.9, 0]} center distanceFactor={11} zIndexRange={[20, 0]}>
+          <div className="pet-hearts">
+            {hearts.map((h, i) => (
+              <span key={h} style={{ '--dx': `${((i % 3) - 1) * 16}px` } as CSSProperties}>
+                ❤️
+              </span>
+            ))}
+          </div>
+        </Html>
+      )}
 
       <ActionBubble agentId={agentId} />
     </group>

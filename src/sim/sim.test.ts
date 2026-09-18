@@ -10,7 +10,7 @@ import { createWorld, tick } from './world';
 import { catchUp } from './catchup';
 import { scoreAction } from './utility';
 import { ACTIONS } from './actions';
-import { applyIntervention } from './player';
+import { applyIntervention, petAgent } from './player';
 import { foodCap, teachMultiplier } from './knowledge';
 import type { WorldState, Agent } from './types';
 import {
@@ -199,6 +199,25 @@ describe('stage 5 — the player', () => {
     rich.playerPoints = 999;
     expect(applyIntervention(rich, 'medicine')).toBe(false); // no one is in crisis
     expect(rich.playerPoints).toBe(999); // nothing spent
+  });
+
+  it('petting eases loneliness and boredom but never survival needs', () => {
+    const w = createWorld(4);
+    const a = w.agents[0]!;
+    a.needs.loneliness = 80;
+    a.needs.boredom = 70;
+    a.needs.hunger = 60;
+    const hungerBefore = a.needs.hunger;
+    expect(petAgent(w, a.id)).toBe(true);
+    expect(a.needs.loneliness).toBeLessThan(80);
+    expect(a.needs.boredom).toBeLessThan(70);
+    expect(a.needs.hunger).toBe(hungerBefore); // survival is untouched — no cheat
+    // a lifted-from-low pet is chronicled
+    expect(w.journal.some((e) => e.kind === 'player')).toBe(true);
+    // petting a dead / missing agent is a no-op
+    a.alive = false;
+    expect(petAgent(w, a.id)).toBe(false);
+    expect(petAgent(w, 'nobody')).toBe(false);
   });
 
   it('an intervention leaves the live simulation deterministic', () => {
