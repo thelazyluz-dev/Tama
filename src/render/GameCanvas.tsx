@@ -21,7 +21,9 @@ export function GameCanvas(): JSX.Element {
         toneMappingExposure: 1.05,
       }}
       camera={{
-        position: [WORLD_HALF * 0.55, WORLD_HALF * 0.8, WORLD_HALF * 0.55],
+        // Start intimate — close on the creature's face (Tamagotchi feel).
+        // The user can still orbit and zoom out to an overview.
+        position: [4.5, 5.5, 7],
         fov: 45,
         near: 0.1,
         far: WORLD_HALF * 8,

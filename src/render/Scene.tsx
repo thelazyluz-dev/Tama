@@ -41,11 +41,13 @@ export function Scene(): JSX.Element {
         enablePan={false}
         enableDamping
         dampingFactor={0.08}
-        minDistance={WORLD_HALF * 0.35}
+        // Let the player get right up to the creature's face, or pull back
+        // to an overview of the whole valley.
+        minDistance={3.5}
         maxDistance={WORLD_HALF * 1.4}
         // Top-side band, no free rotation into the horizon or straight down.
-        minPolarAngle={0.55}
-        maxPolarAngle={1.05}
+        minPolarAngle={0.5}
+        maxPolarAngle={1.2}
       />
     </>
   );

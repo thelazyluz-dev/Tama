@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>מעבדת דמויות — Tama</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #10162b; font-family: 'Heebo', system-ui, sans-serif; }
+      #c { position: fixed; inset: 0; }
+      .col-labels { position: fixed; top: 14px; left: 0; right: 0; display: flex; direction: ltr; pointer-events: none; }
+      .col-labels > div { flex: 1; text-align: center; color: #eaf0f7; font-size: 20px; font-weight: 800; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
+      .col-labels small { display: block; font-size: 12px; font-weight: 500; color: #9fb0c8; }
+      .mood { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); color: #ffd98a; font-size: 16px; font-weight: 700; background: rgba(10,14,30,.6); padding: 6px 14px; border-radius: 999px; }
+    </style>
+  </head>
+  <body>
+    <canvas id="c"></canvas>
+    <div class="col-labels">
+      <div>בועה<small>Blob — עגלגל, פנים ענקיות</small></div>
+      <div>שעועית<small>Bean — יצור־אדם קטן וכפיף</small></div>
+      <div>חתלתול<small>Critter — חיה עם אוזניים וזנב</small></div>
+    </div>
+    <div class="mood" id="mood">מצב רוח: שמח</div>
+    <script type="module" src="/lab/creatureLab.ts"></script>
+  </body>
+</html>

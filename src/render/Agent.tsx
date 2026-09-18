@@ -1,20 +1,78 @@
-// The characters — a stylised low-poly figure per agent, animated procedurally
-// (faces its heading, walks with a leg/arm swing, breathes idle, lies down to
-// sleep). Body (shirt) is tinted by the current action, and a speech bubble
-// shows what it is doing. Read-only.
+// The characters — a "bean" creature per agent (SPEC stage-6 direction: a small
+// person-creature with a real, expressive face). Each individual's LOOK is
+// derived from its traits (curiosity → eye size, constitution → body size,
+// sociability → blush, temper → brows) and colour, so children resemble their
+// parents (traits are inherited). The FACE reflects the agent's live mood —
+// hungry, cold, sleepy, sick, content, happy — the thing that makes you care.
+// Read-only: it renders sim state, never writes it.
 
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { heightAt, getAgent, ADULT_MIN_AGE_DAYS } from '../sim';
+import type { Agent } from '../sim';
 import { useGameStore } from '../store';
-import { ACTION_COLOR, ACTION_BUBBLE } from './palette';
+import { ACTION_BUBBLE } from './palette';
 
-const SKIN = '#f0c19a';
-const HAIR_F = '#3a2a1c';
-const HAIR_M = '#241b12';
-const PANTS = '#3b465e';
+type Mood = 'happy' | 'content' | 'hungry' | 'cold' | 'sleepy' | 'sick' | 'sad';
+
+const COLD_TINT = new THREE.Color(0.62, 0.76, 0.96);
+const SICK_TINT = new THREE.Color(0.6, 0.78, 0.5);
+
+function hash01(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return ((h >>> 0) % 1000) / 1000;
+}
+
+interface Identity {
+  base: THREE.Color;
+  belly: THREE.Color;
+  tuft: THREE.Color;
+  eyeSize: number;
+  eyeSep: number;
+  bodyScale: number;
+  browAngle: number;
+  blush: number;
+}
+
+/** A stable look derived from the agent's inherited traits (so kin resemble). */
+function identityOf(a: Agent): Identity {
+  const t = a.traits;
+  const idj = hash01(a.id); // small per-individual jitter
+  // Hue is trait-driven (inheritable), nudged a little per individual.
+  let hue = t.curiosity * 0.4 + t.sociability * 0.35 + t.constitution * 0.25;
+  hue = (hue * 0.85 + idj * 0.15) % 1;
+  const base = new THREE.Color().setHSL(hue, 0.42 + t.sociability * 0.18, 0.58 + idj * 0.08);
+  const belly = base.clone().lerp(new THREE.Color(0xffffff), 0.45);
+  const tuft = base.clone().lerp(new THREE.Color(0x000000), 0.28);
+  return {
+    base,
+    belly,
+    tuft,
+    eyeSize: 0.088 + t.curiosity * 0.05,
+    eyeSep: 0.17,
+    bodyScale: 0.9 + t.constitution * 0.22,
+    browAngle: (t.temper - 0.5) * 0.9, // hot-tempered → slanted brows
+    blush: t.sociability,
+  };
+}
+
+function moodOf(a: Agent): Mood {
+  if (a.health < 30) return 'sick';
+  const act = a.currentAction;
+  if (act?.type === 'sleep' && act.inRange) return 'sleepy';
+  if (a.needs.warmth > 68) return 'cold';
+  if (a.needs.hunger > 70 || a.needs.thirst > 75) return 'hungry';
+  if (a.needs.fatigue > 82) return 'sleepy';
+  if (a.needs.loneliness > 76) return 'sad';
+  if (a.health > 68 && a.needs.hunger < 42 && a.needs.thirst < 45 && a.needs.warmth < 50) return 'happy';
+  return 'content';
+}
 
 function ActionBubble({ agentId }: { agentId: string }): JSX.Element | null {
   const action = useGameStore((s) => getAgent(s.world, agentId)?.currentAction?.type ?? null);
@@ -22,7 +80,7 @@ function ActionBubble({ agentId }: { agentId: string }): JSX.Element | null {
   if (!alive || !action) return null;
   const { emoji, label } = ACTION_BUBBLE[action];
   return (
-    <Html position={[0, 3.0, 0]} center distanceFactor={13} zIndexRange={[10, 0]}>
+    <Html position={[0, 2.4, 0]} center distanceFactor={12} zIndexRange={[10, 0]}>
       <div className="agent-bubble">
         <span className="agent-bubble-emoji">{emoji}</span>
         {label}
@@ -34,19 +92,31 @@ function ActionBubble({ agentId }: { agentId: string }): JSX.Element | null {
 function AgentFigure({ agentId, isPlayer }: { agentId: string; isPlayer: boolean }): JSX.Element {
   const group = useRef<THREE.Group>(null);
   const rig = useRef<THREE.Group>(null);
-  const body = useRef<THREE.MeshStandardMaterial>(null);
+  const bodyMat = useRef<THREE.MeshStandardMaterial>(null);
   const legL = useRef<THREE.Group>(null);
   const legR = useRef<THREE.Group>(null);
   const armL = useRef<THREE.Group>(null);
   const armR = useRef<THREE.Group>(null);
-  const target = useRef(new THREE.Color(ACTION_COLOR.wander));
+  const eyes = useRef<THREE.Group>(null);
+  const mouthSmile = useRef<THREE.Mesh>(null);
+  const mouthFrown = useRef<THREE.Mesh>(null);
+  const mouthOpen = useRef<THREE.Mesh>(null);
+  const mouthFlat = useRef<THREE.Mesh>(null);
+  const cheeks = useRef<THREE.Group>(null);
   const prev = useRef({ x: 0, z: 0, init: false });
   const phase = useRef(0);
+  const tintTarget = useRef(new THREE.Color());
+
+  // Identity is stable per agent (from inherited traits) — computed once.
+  const id = useMemo(() => {
+    const a = getAgent(useGameStore.getState().world, agentId);
+    return a ? identityOf(a) : null;
+  }, [agentId]);
 
   useFrame((state, rawDelta) => {
     const g = group.current;
     const r = rig.current;
-    if (!g || !r) return;
+    if (!g || !r || !id) return;
     const world = useGameStore.getState().world;
     const agent = getAgent(world, agentId);
     if (!agent) return;
@@ -74,7 +144,8 @@ function AgentFigure({ agentId, isPlayer }: { agentId: string; isPlayer: boolean
 
     // Children are smaller, growing to full size at adulthood.
     const age = world.day - agent.birthDay;
-    const targetScale = 0.5 + 0.5 * Math.min(1, Math.max(0, age / ADULT_MIN_AGE_DAYS));
+    const grow = 0.5 + 0.5 * Math.min(1, Math.max(0, age / ADULT_MIN_AGE_DAYS));
+    const targetScale = grow * id.bodyScale;
     const s = g.scale.x + (targetScale - g.scale.x) * (1 - Math.exp(-4 * dt));
     g.scale.setScalar(s);
 
@@ -97,10 +168,10 @@ function AgentFigure({ agentId, isPlayer }: { agentId: string; isPlayer: boolean
       if (grp) grp.rotation.x += (x - grp.rotation.x) * lerp;
     };
     if (walking) {
-      set(legL.current, swing * 0.55);
-      set(legR.current, -swing * 0.55);
-      set(armL.current, -swing * 0.4);
-      set(armR.current, swing * 0.4);
+      set(legL.current, swing * 0.5);
+      set(legR.current, -swing * 0.5);
+      set(armL.current, -swing * 0.45);
+      set(armR.current, swing * 0.45);
     } else if (busy) {
       const w = Math.sin(t * 6) * 0.5;
       set(armL.current, -0.6 + w);
@@ -116,79 +187,152 @@ function AgentFigure({ agentId, isPlayer }: { agentId: string; isPlayer: boolean
 
     const poseEase = 1 - Math.exp(-8 * dt);
     if (sleeping) {
-      r.rotation.z += (-1.35 - r.rotation.z) * poseEase;
-      r.position.y += (0.15 - r.position.y) * poseEase;
+      r.rotation.z += (-1.3 - r.rotation.z) * poseEase;
+      r.position.y += (0.1 - r.position.y) * poseEase;
     } else {
       r.rotation.z += (0 - r.rotation.z) * poseEase;
-      const bob = walking ? Math.abs(swing) * 0.06 : Math.sin(t * 2) * 0.025;
+      const bob = walking ? Math.abs(swing) * 0.06 : Math.sin(t * 2 + phase.current) * 0.02;
       r.position.y += (bob - r.position.y) * poseEase;
     }
 
-    if (body.current) {
-      const col = agent.alive ? ACTION_COLOR[action?.type ?? 'wander'] : '#6b6b6b';
-      target.current.set(col);
-      body.current.color.lerp(target.current, 1 - Math.exp(-6 * dt));
+    // --- expression -------------------------------------------------------
+    const mood = agent.alive ? moodOf(agent) : 'content';
+    const smiling = mood === 'happy' || mood === 'content';
+    const closedEyes = mood === 'sleepy' || mood === 'sick';
+    if (mouthSmile.current) mouthSmile.current.visible = smiling;
+    if (mouthFrown.current) mouthFrown.current.visible = mood === 'cold' || mood === 'sad';
+    if (mouthOpen.current) mouthOpen.current.visible = mood === 'hungry';
+    if (mouthFlat.current) mouthFlat.current.visible = closedEyes;
+    if (cheeks.current) cheeks.current.visible = mood === 'happy' || (mood === 'content' && id.blush > 0.5);
+
+    if (eyes.current) {
+      // blink, or hold closed when sleepy/sick
+      const blink = (t * 0.6 + phase.current) % 3.4 < 0.13;
+      const targetY = closedEyes ? 0.12 : blink ? 0.1 : 1;
+      eyes.current.scale.y += (targetY - eyes.current.scale.y) * (1 - Math.exp(-18 * dt));
+    }
+
+    if (bodyMat.current) {
+      tintTarget.current.copy(id.base);
+      if (mood === 'cold') tintTarget.current.lerp(COLD_TINT, 0.5);
+      else if (mood === 'sick') tintTarget.current.lerp(SICK_TINT, 0.45);
+      if (!agent.alive) tintTarget.current.setRGB(0.42, 0.42, 0.42);
+      bodyMat.current.color.lerp(tintTarget.current, 1 - Math.exp(-6 * dt));
     }
   });
 
-  const hair = isPlayer ? HAIR_F : HAIR_M;
   const ringColor = isPlayer ? '#bfe3ff' : '#ffd39b';
+  if (!id) return <group ref={group} />;
+  const es = id.eyeSize;
+
+  const eye = (side: number): JSX.Element => (
+    <group position={[side * id.eyeSep, 0, 0]}>
+      <mesh scale={[1, 1, 0.55]}>
+        <sphereGeometry args={[es, 18, 18]} />
+        <meshStandardMaterial color="#ffffff" roughness={0.25} />
+      </mesh>
+      <mesh position={[0, 0, es * 0.55]}>
+        <sphereGeometry args={[es * 0.55, 14, 14]} />
+        <meshStandardMaterial color="#1b1520" roughness={0.2} />
+      </mesh>
+      <mesh position={[side * es * 0.2, es * 0.25, es * 0.8]}>
+        <sphereGeometry args={[es * 0.16, 8, 8]} />
+        <meshBasicMaterial color="#ffffff" />
+      </mesh>
+      <mesh position={[side * -0.02, es * 1.15, -es * 0.1]} rotation={[0, 0, side * id.browAngle]}>
+        <boxGeometry args={[es * 1.3, es * 0.22, es * 0.4]} />
+        <meshStandardMaterial color="#2a2028" roughness={0.7} />
+      </mesh>
+    </group>
+  );
 
   return (
     <group ref={group}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]}>
-        <ringGeometry args={[0.8, 1.05, 28]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
+        <ringGeometry args={[0.55, 0.72, 28]} />
         <meshBasicMaterial color={ringColor} transparent opacity={0.45} depthWrite={false} side={THREE.DoubleSide} />
       </mesh>
 
       <group ref={rig}>
-        <group ref={legL} position={[0.16, 0.85, 0]}>
-          <mesh position={[0, -0.4, 0]} castShadow>
-            <capsuleGeometry args={[0.14, 0.5, 4, 8]} />
-            <meshStandardMaterial color={PANTS} roughness={0.9} />
+        {/* legs */}
+        <group ref={legL} position={[0.2, 0.5, 0.02]}>
+          <mesh position={[0, -0.2, 0]} castShadow>
+            <capsuleGeometry args={[0.15, 0.16, 6, 12]} />
+            <meshStandardMaterial color={id.base.clone().lerp(new THREE.Color(0, 0, 0), 0.12).getStyle()} roughness={0.75} />
           </mesh>
         </group>
-        <group ref={legR} position={[-0.16, 0.85, 0]}>
-          <mesh position={[0, -0.4, 0]} castShadow>
-            <capsuleGeometry args={[0.14, 0.5, 4, 8]} />
-            <meshStandardMaterial color={PANTS} roughness={0.9} />
-          </mesh>
-        </group>
-
-        <mesh position={[0, 1.18, 0]} castShadow>
-          <capsuleGeometry args={[0.3, 0.5, 6, 14]} />
-          <meshStandardMaterial ref={body} roughness={0.7} metalness={0.03} />
-        </mesh>
-
-        <group ref={armL} position={[0.4, 1.5, 0]}>
-          <mesh position={[0, -0.32, 0]} castShadow>
-            <capsuleGeometry args={[0.1, 0.42, 4, 8]} />
-            <meshStandardMaterial color={SKIN} roughness={0.85} />
-          </mesh>
-        </group>
-        <group ref={armR} position={[-0.4, 1.5, 0]}>
-          <mesh position={[0, -0.32, 0]} castShadow>
-            <capsuleGeometry args={[0.1, 0.42, 4, 8]} />
-            <meshStandardMaterial color={SKIN} roughness={0.85} />
+        <group ref={legR} position={[-0.2, 0.5, 0.02]}>
+          <mesh position={[0, -0.2, 0]} castShadow>
+            <capsuleGeometry args={[0.15, 0.16, 6, 12]} />
+            <meshStandardMaterial color={id.base.clone().lerp(new THREE.Color(0, 0, 0), 0.12).getStyle()} roughness={0.75} />
           </mesh>
         </group>
 
-        <mesh position={[0, 1.92, 0]} castShadow>
-          <sphereGeometry args={[0.42, 20, 20]} />
-          <meshStandardMaterial color={SKIN} roughness={0.82} />
+        {/* body */}
+        <mesh position={[0, 1.0, 0]} castShadow>
+          <capsuleGeometry args={[0.5, 0.62, 10, 20]} />
+          <meshStandardMaterial ref={bodyMat} color={id.base.getStyle()} roughness={0.6} />
         </mesh>
-        <mesh position={[0, 1.95, 0]}>
-          <sphereGeometry args={[0.45, 18, 18, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
-          <meshStandardMaterial color={hair} roughness={0.95} />
+        {/* belly patch */}
+        <mesh position={[0, 0.86, 0.4]} scale={[0.72, 1.0, 0.4]}>
+          <sphereGeometry args={[0.42, 18, 18]} />
+          <meshStandardMaterial color={id.belly.getStyle()} roughness={0.7} />
         </mesh>
-        <mesh position={[0.15, 1.95, 0.36]}>
-          <sphereGeometry args={[0.06, 10, 10]} />
-          <meshStandardMaterial color="#2a2320" />
+        {/* tuft */}
+        <mesh position={[0, 1.66, -0.02]}>
+          <sphereGeometry args={[0.12, 12, 12]} />
+          <meshStandardMaterial color={id.tuft.getStyle()} roughness={0.85} />
         </mesh>
-        <mesh position={[-0.15, 1.95, 0.36]}>
-          <sphereGeometry args={[0.06, 10, 10]} />
-          <meshStandardMaterial color="#2a2320" />
-        </mesh>
+
+        {/* arms */}
+        <group ref={armL} position={[0.5, 1.12, 0]}>
+          <mesh position={[0, -0.18, 0]} castShadow>
+            <capsuleGeometry args={[0.13, 0.2, 6, 12]} />
+            <meshStandardMaterial color={id.base.getStyle()} roughness={0.65} />
+          </mesh>
+        </group>
+        <group ref={armR} position={[-0.5, 1.12, 0]}>
+          <mesh position={[0, -0.18, 0]} castShadow>
+            <capsuleGeometry args={[0.13, 0.2, 6, 12]} />
+            <meshStandardMaterial color={id.base.getStyle()} roughness={0.65} />
+          </mesh>
+        </group>
+
+        {/* face — on the upper front of the body */}
+        <group position={[0, 1.28, 0.42]}>
+          <group ref={eyes}>
+            {eye(1)}
+            {eye(-1)}
+          </group>
+
+          <mesh ref={mouthSmile} position={[0, -es * 1.7, 0.02]} rotation={[0, 0, Math.PI]}>
+            <torusGeometry args={[es * 1.15, es * 0.13, 8, 16, Math.PI]} />
+            <meshStandardMaterial color="#3a1b22" roughness={0.5} />
+          </mesh>
+          <mesh ref={mouthFrown} visible={false} position={[0, -es * 1.4, 0.02]} rotation={[0, 0, Math.PI * 0.2]}>
+            <torusGeometry args={[es * 1.0, es * 0.12, 8, 16, Math.PI * 0.6]} />
+            <meshStandardMaterial color="#3a1b22" roughness={0.5} />
+          </mesh>
+          <mesh ref={mouthOpen} visible={false} position={[0, -es * 1.7, 0.02]} scale={[0.9, 1.3, 0.5]}>
+            <sphereGeometry args={[es * 0.6, 14, 14]} />
+            <meshStandardMaterial color="#3a1b22" roughness={0.5} />
+          </mesh>
+          <mesh ref={mouthFlat} visible={false} position={[0, -es * 1.55, 0.02]} scale={[1.5, 0.6, 0.5]}>
+            <sphereGeometry args={[es * 0.34, 10, 10]} />
+            <meshStandardMaterial color="#3a1b22" roughness={0.5} />
+          </mesh>
+
+          <group ref={cheeks} visible={false}>
+            <mesh position={[id.eyeSep * 1.7, -es * 0.9, 0.05]} scale={[1, 0.7, 0.3]}>
+              <sphereGeometry args={[es * 0.62, 12, 12]} />
+              <meshStandardMaterial color="#ff9db0" roughness={0.6} transparent opacity={0.85} />
+            </mesh>
+            <mesh position={[-id.eyeSep * 1.7, -es * 0.9, 0.05]} scale={[1, 0.7, 0.3]}>
+              <sphereGeometry args={[es * 0.62, 12, 12]} />
+              <meshStandardMaterial color="#ff9db0" roughness={0.6} transparent opacity={0.85} />
+            </mesh>
+          </group>
+        </group>
       </group>
 
       <ActionBubble agentId={agentId} />
