@@ -191,12 +191,35 @@ body {
 }
 
 .journal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  font-family: inherit;
   font-size: 13px;
   font-weight: 700;
   color: var(--text-dim);
   padding: 0 6px 8px 0;
   border-bottom: 1px solid var(--panel-border);
   margin-bottom: 6px;
+  cursor: pointer;
+}
+
+.journal-chevron {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.journal-panel.collapsed {
+  max-height: none;
+}
+
+.journal-panel.collapsed .journal-head {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
 }
 
 .journal-list {
@@ -304,7 +327,33 @@ body {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: 6px;
   margin-bottom: 10px;
+}
+
+.status-collapse {
+  pointer-events: auto;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  font-family: inherit;
+}
+
+.status-mini {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.status-mini .mini-action {
+  margin-inline-start: auto;
+  max-width: 100%;
 }
 
 .agent-name {
@@ -897,11 +946,14 @@ body {
     background: rgba(15, 20, 32, 0.66);
   }
   .status-panel {
-    width: 190px;
+    width: 172px;
     padding: 8px 9px;
     top: 10px;
     right: 10px;
     border-radius: 11px;
+  }
+  .status-panel.collapsed {
+    width: 150px;
   }
   .agent-name {
     font-size: 15px;
@@ -936,6 +988,11 @@ body {
     bottom: 62px;
     padding: 8px 4px 8px 9px;
   }
+  .journal-panel.collapsed {
+    width: auto;
+    max-width: 120px;
+    padding: 7px 10px;
+  }
   .journal-entry {
     grid-template-columns: 44px 1fr;
     font-size: 11px;
@@ -967,14 +1024,15 @@ body {
     max-width: 300px;
     max-height: 62vh;
   }
-  /* Crisis alert spans the top so it stays legible on a narrow phone. */
+  /* Crisis alert sits at the top-left, leaving the right edge for the (now
+     compact) status panel so the two never overlap on a narrow phone. */
   .crisis-alert {
     top: 8px;
     left: 8px;
-    right: 8px;
+    right: 168px;
     transform: none;
     justify-content: space-between;
-    gap: 8px;
+    gap: 6px;
     padding: 7px 9px;
   }
   .crisis-text {

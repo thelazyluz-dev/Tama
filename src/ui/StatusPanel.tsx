@@ -1,5 +1,6 @@
 // Corner status panel: identity + clock, season/weather, health, food store,
-// the eight needs as bars, and the current action. Reads the store; never
+// the eight needs as bars, and the current action. Collapsible — compact by
+// default on phones so it never hides the creature. Reads the store; never
 // writes it.
 
 import { useState } from 'react';
@@ -18,6 +19,14 @@ import {
   healthColor,
 } from './labels';
 
+function isPhone(): boolean {
+  try {
+    return window.matchMedia('(max-width: 700px)').matches;
+  } catch {
+    return false;
+  }
+}
+
 export function StatusPanel(): JSX.Element {
   const world = useGameStore((s) => s.world);
   const renameAgent = useGameStore((s) => s.renameAgent);
@@ -30,6 +39,7 @@ export function StatusPanel(): JSX.Element {
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [collapsed, setCollapsed] = useState(isPhone);
 
   const startEdit = () => {
     setDraft(agent.name);
@@ -41,7 +51,7 @@ export function StatusPanel(): JSX.Element {
   };
 
   return (
-    <div className="panel status-panel">
+    <div className={`panel status-panel${collapsed ? ' collapsed' : ''}`}>
       <div className="status-head">
         {editing ? (
           <input
@@ -62,14 +72,14 @@ export function StatusPanel(): JSX.Element {
           </button>
         )}
         <span className="clock">{clockText(world.day, world.tick)}</span>
-      </div>
-
-      <div className="status-env">
-        <span className="chip">
-          {SEASON_EMOJI[world.season]} {SEASON_LABEL[world.season]}
-        </span>
-        <span className="chip subtle">{WEATHER_LABEL[world.weather]}</span>
-        <span className="chip food">🍎 {Math.round(world.foodStock)}</span>
+        <button
+          type="button"
+          className="status-collapse"
+          onClick={() => setCollapsed((c) => !c)}
+          aria-label={collapsed ? 'הרחב' : 'כווץ'}
+        >
+          {collapsed ? '▾' : '▴'}
+        </button>
       </div>
 
       <div className="need-row health-row">
@@ -83,49 +93,69 @@ export function StatusPanel(): JSX.Element {
         <span className="need-value">{Math.round(agent.health)}</span>
       </div>
 
-      <div className="needs-grid">
-        {(NEED_KEYS as readonly NeedKey[]).map((key) => {
-          const value = agent.needs[key];
-          return (
-            <div className="need-row" key={key}>
-              <span className="need-label">{NEED_LABEL[key]}</span>
-              <span className="need-bar">
-                <span
-                  className="need-fill"
-                  style={{ width: `${value}%`, background: needColor(value) }}
-                />
+      {collapsed ? (
+        <div className="status-mini">
+          <span className="chip">
+            {SEASON_EMOJI[world.season]} {SEASON_LABEL[world.season]}
+          </span>
+          <span className="chip food">🍎 {Math.round(world.foodStock)}</span>
+          <span className="chip subtle mini-action">{actionText(agent)}</span>
+        </div>
+      ) : (
+        <>
+          <div className="status-env">
+            <span className="chip">
+              {SEASON_EMOJI[world.season]} {SEASON_LABEL[world.season]}
+            </span>
+            <span className="chip subtle">{WEATHER_LABEL[world.weather]}</span>
+            <span className="chip food">🍎 {Math.round(world.foodStock)}</span>
+          </div>
+
+          <div className="needs-grid">
+            {(NEED_KEYS as readonly NeedKey[]).map((key) => {
+              const value = agent.needs[key];
+              return (
+                <div className="need-row" key={key}>
+                  <span className="need-label">{NEED_LABEL[key]}</span>
+                  <span className="need-bar">
+                    <span
+                      className="need-fill"
+                      style={{ width: `${value}%`, background: needColor(value) }}
+                    />
+                  </span>
+                  <span className="need-value">{Math.round(value)}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="action-row">
+            <span className="action-label">פעולה</span>
+            <span className="action-value">{actionText(agent)}</span>
+          </div>
+
+          {other && rel && (
+            <div className="rel-row">
+              <span className="rel-label">{partner ? '❤️ בן/בת זוג' : '🙂 מכר/ה'}</span>
+              <span className="rel-value">
+                {other.name} · חיבה {Math.round(rel.affection)}
               </span>
-              <span className="need-value">{Math.round(value)}</span>
             </div>
-          );
-        })}
-      </div>
+          )}
 
-      <div className="action-row">
-        <span className="action-label">פעולה</span>
-        <span className="action-value">{actionText(agent)}</span>
-      </div>
-
-      {other && rel && (
-        <div className="rel-row">
-          <span className="rel-label">{partner ? '❤️ בן/בת זוג' : '🙂 מכר/ה'}</span>
-          <span className="rel-value">
-            {other.name} · חיבה {Math.round(rel.affection)}
-          </span>
-        </div>
-      )}
-
-      {world.knowledge.known.length > 0 && (
-        <div className="tech-row">
-          <span className="tech-label">ידע</span>
-          <span className="tech-chips">
-            {world.knowledge.known.map((tech) => (
-              <span className="tech-chip" key={tech} title={TECH_LABEL[tech].name}>
-                {TECH_LABEL[tech].emoji} {TECH_LABEL[tech].name}
+          {world.knowledge.known.length > 0 && (
+            <div className="tech-row">
+              <span className="tech-label">ידע</span>
+              <span className="tech-chips">
+                {world.knowledge.known.map((tech) => (
+                  <span className="tech-chip" key={tech} title={TECH_LABEL[tech].name}>
+                    {TECH_LABEL[tech].emoji} {TECH_LABEL[tech].name}
+                  </span>
+                ))}
               </span>
-            ))}
-          </span>
-        </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
